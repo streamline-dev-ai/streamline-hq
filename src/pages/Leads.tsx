@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, ExternalLink, Clipboard, Check, Phone, RefreshCcw, Sparkles, BarChart3 } from "lucide-react";
+import { Plus, Search, ExternalLink, Phone, RefreshCcw, BarChart3, MessageSquareText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { daysSinceSaISOString, getSaDateString } from "@/utils/saDate";
+import { addDaysToSaYmd, daysBetweenSaYmd, daysSinceSaISOString, getSaDateString } from "@/utils/saDate";
 import { useToast } from "@/components/toast/ToastProvider";
 import LeadDetailsDrawer from "@/components/leads/LeadDetailsDrawer";
-import SuggestReplyModal from "@/components/leads/SuggestReplyModal";
 import LeadsAnalytics from "@/components/leads/LeadsAnalytics";
+import { useSearchParams } from "react-router-dom";
 
 type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost";
 
@@ -17,6 +17,9 @@ type LeadRow = {
   phone: string | null;
   email: string | null;
   niche: string | null;
+  is_client: boolean | null;
+  follow_up_due: string | null;
+  follow_up_type: string | null;
   stage: LeadStage | string | null;
   last_contact_at: string | null;
   demo_url: string | null;
@@ -128,6 +131,7 @@ const DEFAULT_FORM: AddLeadForm = {
 
 export default function Leads() {
   const { pushToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const saToday = useMemo(() => getSaDateString(), []);
   const saMonth = useMemo(() => saToday.slice(0, 7), [saToday]);
   const [loading, setLoading] = useState(true);
@@ -135,15 +139,13 @@ export default function Leads() {
   const [tab, setTab] = useState<"pipeline" | "analytics">("pipeline");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const [query, setQuery] = useState("");
-  const [copiedLeadId, setCopiedLeadId] = useState<string | null>(null);
   const copyTimeoutRef = useRef<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form, setForm] = useState<AddLeadForm>(DEFAULT_FORM);
   const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
   const [detailsLead, setDetailsLead] = useState<LeadRow | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [suggestLead, setSuggestLead] = useState<Pick<LeadRow, "id" | "business_name" | "owner_name" | "stage" | "notes"> | null>(null);
-  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [detailsTab, setDetailsTab] = useState<"details" | "messages">("details");
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
@@ -199,7 +201,8 @@ export default function Leads() {
     try {
       const res = await supabase
         .from("leads")
-        .select("id, business_name, owner_name, phone, email, niche, stage, last_contact_at, demo_url, notes, opener_used")
+        .select("id, business_name, owner_name, phone, email, niche, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used")
+        .or("is_client.is.null,is_client.eq.false")
         .order("last_contact_at", { ascending: true, nullsFirst: true });
 
       if (res.error) throw res.error;
@@ -230,6 +233,9 @@ export default function Leads() {
 
           const next = payload.new as Partial<LeadRow> | null;
           if (!next?.id) return prev;
+          if (next.is_client === true) {
+            return prev.filter((l) => l.id !== next.id).slice().sort(sortLeads);
+          }
           const idx = prev.findIndex((l) => l.id === next.id);
           if (idx === -1) return [...prev, next as LeadRow].slice().sort(sortLeads);
           const updated = prev.slice();
@@ -250,13 +256,53 @@ export default function Leads() {
     };
   }, []);
 
+  useEffect(() => {
+    const id = searchParams.get("lead");
+    if (!id) return;
+    const openTab = searchParams.get("tab");
+    const hit = leads.find((l) => l.id === id);
+    if (!hit) return;
+    setDetailsLead(hit);
+    setDetailsTab(openTab === "messages" ? "messages" : "details");
+    setDetailsOpen(true);
+    setSearchParams((prev) => {
+      prev.delete("lead");
+      prev.delete("tab");
+      return prev;
+    });
+  }, [leads, searchParams, setSearchParams]);
+
   async function handleStageChange(lead: LeadRow, nextStage: LeadStage) {
     const prevStage = lead.stage;
+    const today = getSaDateString();
+    const lower = nextStage.toLowerCase();
+    let follow_up_due: string | null = lead.follow_up_due;
+    let follow_up_type: string | null = lead.follow_up_type;
+
+    if (lower === "messaged") {
+      follow_up_due = addDaysToSaYmd(today, 3);
+      follow_up_type = "no_reply_check";
+    } else if (lower === "demo_sent") {
+      follow_up_due = addDaysToSaYmd(today, 1);
+      follow_up_type = "demo_check_in";
+    } else if (lower === "proposal_sent") {
+      follow_up_due = addDaysToSaYmd(today, 2);
+      follow_up_type = "proposal_follow_up";
+    } else if (lower === "closed" || lower === "lost") {
+      follow_up_due = null;
+      follow_up_type = null;
+    }
+
     setSavingLeadId(lead.id);
-    setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, stage: nextStage } : l)).slice().sort(sortLeads));
+    setLeads((prev) =>
+      prev
+        .map((l) => (l.id === lead.id ? { ...l, stage: nextStage, follow_up_due, follow_up_type } : l))
+        .slice()
+        .sort(sortLeads),
+    );
 
     try {
-      const res = await supabase.from("leads").update({ stage: nextStage }).eq("id", lead.id);
+      const res = await supabase.from("leads").update({ stage: nextStage, follow_up_due, follow_up_type }).eq("id", lead.id);
       if (res.error) throw res.error;
       const ev = await supabase.from("lead_stage_events").insert({
         lead_id: lead.id,
@@ -273,57 +319,10 @@ export default function Leads() {
     }
   }
 
-  async function copyOpener(lead: LeadRow) {
-    const owner = (lead.owner_name ?? "").trim();
-    const msg = owner
-      ? `Hi, is this ${owner} from ${lead.business_name}? 👋`
-      : `Hi, is this the owner of ${lead.business_name}? 👋`;
-
-    try {
-      await navigator.clipboard.writeText(msg);
-      setCopiedLeadId(lead.id);
-      if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = window.setTimeout(() => setCopiedLeadId(null), 2000);
-    } catch {
-      pushToast({ type: "error", title: "Copy opener", message: "Clipboard access was blocked" });
-      return;
-    }
-
-    const nowIso = new Date().toISOString();
-    setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, last_contact_at: nowIso, opener_used: "opener" } : l)).slice().sort(sortLeads));
-    try {
-      await supabase.from("outreach_messages").insert({
-        lead_id: lead.id,
-        direction: "sent",
-        message_text: msg,
-        template_id: "opener",
-        sent_at: nowIso,
-        replied: false,
-      });
-      const upd = await supabase.from("leads").update({ last_contact_at: nowIso, opener_used: "opener" }).eq("id", lead.id);
-      if (upd.error) throw upd.error;
-    } catch (e) {
-      const m = e instanceof Error ? e.message : "Failed to log opener";
-      pushToast({ type: "error", title: "Copy opener", message: m });
-    }
-  }
-
-  async function logContact(lead: LeadRow) {
-    const prev = lead.last_contact_at;
-    const next = new Date().toISOString();
-    setSavingLeadId(lead.id);
-    setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, last_contact_at: next } : l)).slice().sort(sortLeads));
-    try {
-      const res = await supabase.from("leads").update({ last_contact_at: next }).eq("id", lead.id);
-      if (res.error) throw res.error;
-      pushToast({ type: "success", title: "Logged", message: "Contact time updated" });
-    } catch (e) {
-      setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, last_contact_at: prev } : l)).slice().sort(sortLeads));
-      const msg = e instanceof Error ? e.message : "Failed to log contact";
-      pushToast({ type: "error", title: "Log contact", message: msg });
-    } finally {
-      setSavingLeadId((x) => (x === lead.id ? null : x));
-    }
+  function openDrawer(lead: LeadRow, openTab: "details" | "messages") {
+    setDetailsLead(lead);
+    setDetailsTab(openTab);
+    setDetailsOpen(true);
   }
 
   async function submitLead() {
@@ -345,7 +344,7 @@ export default function Leads() {
       const res = await supabase
         .from("leads")
         .insert({ business_name, owner_name, phone, email, niche, demo_url, notes, stage: "new", last_contact_at: null })
-        .select("id, business_name, owner_name, phone, email, niche, stage, last_contact_at, demo_url, notes, opener_used")
+        .select("id, business_name, owner_name, phone, email, niche, is_client, stage, last_contact_at, demo_url, notes, opener_used")
         .single();
       if (res.error) throw res.error;
       if (res.data) {
@@ -473,37 +472,29 @@ export default function Leads() {
             const stage = (lead.stage ?? "new").toLowerCase();
             const phone = lead.phone ? normalizePhoneNumber(lead.phone) : "";
             const wa = phone ? `https://wa.me/${phone}` : null;
-            const days = lead.last_contact_at ? daysSinceSaISOString(lead.last_contact_at) : null;
+                const days = lead.last_contact_at ? daysSinceSaISOString(lead.last_contact_at) : null;
             const followUp = days !== null && days >= 3;
             const notContacted = !lead.last_contact_at;
-            const saving = savingLeadId === lead.id;
+                const saving = savingLeadId === lead.id;
+                const due = lead.follow_up_due ? daysBetweenSaYmd(saToday, lead.follow_up_due) >= 0 : false;
+                const dueStage = stage !== "closed" && stage !== "lost";
 
             return (
-              <div
-                key={lead.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  setDetailsLead(lead);
-                  setDetailsOpen(true);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    setDetailsLead(lead);
-                    setDetailsOpen(true);
-                  }
-                }}
-                className="cursor-pointer rounded-2xl border border-border bg-panel p-4 outline-none hover:bg-white/5 focus:ring-2 focus:ring-purple/40"
-              >
+                  <div key={lead.id} className="rounded-2xl border border-border bg-panel p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-base font-semibold">{lead.business_name}</div>
+                    <div className="truncate text-base font-semibold text-zinc-100">{lead.business_name}</div>
                     {lead.owner_name ? <div className="mt-0.5 truncate text-sm text-zinc-400">{lead.owner_name}</div> : null}
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <div className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", stageBadge(stage))}>
                       {formatStageLabel(stage)}
                     </div>
+                        {due && dueStage ? (
+                          <div className="inline-flex items-center rounded-full border border-orange/30 bg-orange/15 px-2 py-1 text-xs font-semibold text-orange">
+                            Follow up due
+                          </div>
+                        ) : null}
                     {notContacted ? (
                       <div className="inline-flex items-center rounded-full border border-rose-500/30 bg-rose-500/15 px-2 py-1 text-xs font-semibold text-rose-300">
                         Not contacted
@@ -526,7 +517,6 @@ export default function Leads() {
                       href={wa}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
                       className="inline-flex items-center gap-2 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
                     >
                       <Phone className="h-4 w-4" />
@@ -543,7 +533,6 @@ export default function Leads() {
                       href={lead.demo_url}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
                       className="inline-flex items-center gap-2 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
                     >
                       <ExternalLink className="h-4 w-4" />
@@ -560,7 +549,6 @@ export default function Leads() {
                     <div className="flex items-center gap-2">
                       <select
                         value={(lead.stage ?? "new").toLowerCase()}
-                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => void handleStageChange(lead, e.target.value as LeadStage)}
                         className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
                       >
@@ -574,47 +562,14 @@ export default function Leads() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void copyOpener(lead);
-                      }}
-                      className={cn(
-                        "inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
-                        copiedLeadId === lead.id
-                          ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                          : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
-                      )}
-                    >
-                      {copiedLeadId === lead.id ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-                      {copiedLeadId === lead.id ? "Copied!" : "Copy Opener"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void logContact(lead);
-                      }}
-                      className="inline-flex items-center justify-center rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5"
-                    >
-                      Log Contact
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSuggestLead({ id: lead.id, business_name: lead.business_name, owner_name: lead.owner_name, stage: lead.stage, notes: lead.notes });
-                      setSuggestOpen(true);
-                    }}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange/30 bg-orange/15 px-3 py-2 text-sm font-semibold text-orange hover:brightness-110"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Suggest Reply
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => openDrawer(lead, "messages")}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5"
+                      >
+                        <MessageSquareText className="h-4 w-4" />
+                        Message
+                      </button>
                 </div>
               </div>
             );
@@ -750,16 +705,9 @@ export default function Leads() {
       <LeadDetailsDrawer
         lead={detailsLead}
         open={detailsOpen}
+        initialTab={detailsTab}
         onClose={() => {
           setDetailsOpen(false);
-        }}
-      />
-
-      <SuggestReplyModal
-        lead={suggestLead}
-        open={suggestOpen}
-        onClose={() => {
-          setSuggestOpen(false);
         }}
       />
     </div>

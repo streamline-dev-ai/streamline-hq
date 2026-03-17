@@ -86,20 +86,9 @@ export default function SuggestReplyModal({ lead, open, onClose }: { lead: LeadR
     }
 
     try {
-      const nowIso = new Date().toISOString();
-      await supabase.from("outreach_messages").insert({
-        lead_id: lead.id,
-        direction: "sent",
-        message_text: final,
-        template_id: "ai_suggest",
-        sent_at: nowIso,
-        replied: false,
-      });
-      await supabase.from("leads").update({ opener_used: "ai_suggest", last_contact_at: nowIso }).eq("id", lead.id);
-      pushToast({ type: "success", title: "Copied", message: "Saved to history" });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to log AI message";
-      pushToast({ type: "error", title: "Log", message: msg });
+      await supabase.from("leads").update({ opener_used: "ai_suggest" }).eq("id", lead.id);
+    } catch {
+      return;
     }
   }
 

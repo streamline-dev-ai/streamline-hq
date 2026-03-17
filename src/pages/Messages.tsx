@@ -189,19 +189,6 @@ export default function Messages() {
     try {
       const updateRes = await supabase.from("message_templates").update({ send_count: nextSend }).eq("id", template.id);
       if (updateRes.error) throw updateRes.error;
-
-      if (activeLead) {
-        const nowIso = new Date().toISOString();
-        await supabase.from("outreach_messages").insert({
-          lead_id: activeLead.id,
-          direction: "sent",
-          message_text: finalText,
-          template_id: template.id,
-          sent_at: nowIso,
-          replied: false,
-        });
-        await supabase.from("leads").update({ last_contact_at: nowIso }).eq("id", activeLead.id);
-      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to track send";
       pushToast({ type: "error", title: "Copy & Track", message: msg });

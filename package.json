@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc -b --noEmit",
-    "seed:leads": "node scripts/seedLeads.mjs"
+    "seed:leads": "node scripts/seedLeads.mjs",
+    "cleanup:auto-messages": "node scripts/cleanupAutoMessages.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

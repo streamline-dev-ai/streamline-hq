@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Clipboard, ExternalLink, Mail, Phone, X } from "lucide-react";
+import { Clipboard, ExternalLink, Mail, Phone, X, Sparkles, RefreshCcw, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/toast/ToastProvider";
 import { useLeadContextStore, type LeadContext } from "@/stores/leadContext";
-import { getSaDateString } from "@/utils/saDate";
+import { getSaDateString, daysBetweenSaYmd } from "@/utils/saDate";
+import { requestGeminiSuggestion } from "@/lib/gemini";
 
 type LeadRow = {
   id: string;
@@ -13,6 +14,9 @@ type LeadRow = {
   phone: string | null;
   email: string | null;
   niche: string | null;
+  is_client: boolean | null;
+  follow_up_due: string | null;
+  follow_up_type: string | null;
   stage: string | null;
   last_contact_at: string | null;
   demo_url: string | null;
@@ -43,13 +47,45 @@ function formatStageLabel(stage: string | null) {
   return s.replace(/_/g, " ");
 }
 
-export default function LeadDetailsDrawer({ lead, open, onClose }: { lead: LeadRow | null; open: boolean; onClose: () => void }) {
+function followUpLabel(t: string | null) {
+  const k = (t ?? "").toLowerCase();
+  if (k === "demo_check_in") return "Demo check-in";
+  if (k === "no_reply_check") return "No reply check";
+  if (k === "proposal_follow_up") return "Proposal follow-up";
+  return t ? t.replace(/_/g, " ") : "—";
+}
+
+type DrawerTab = "details" | "messages";
+
+export default function LeadDetailsDrawer({
+  lead,
+  open,
+  onClose,
+  initialTab = "details",
+}: {
+  lead: LeadRow | null;
+  open: boolean;
+  onClose: () => void;
+  initialTab?: DrawerTab;
+}) {
   const { pushToast } = useToast();
   const setActiveLead = useLeadContextStore((s) => s.setActiveLead);
   const [messages, setMessages] = useState<OutreachMessageRow[]>([]);
   const [events, setEvents] = useState<StageEventRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [savingClient, setSavingClient] = useState(false);
+  const [newDirection, setNewDirection] = useState<"sent" | "received">("sent");
+  const [newText, setNewText] = useState("");
+  const [savingMessage, setSavingMessage] = useState(false);
+  const [tab, setTab] = useState<DrawerTab>(initialTab);
+  const [savingContact, setSavingContact] = useState(false);
+  const [followUpDate, setFollowUpDate] = useState<string>("");
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiText, setAiText] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiCopied, setAiCopied] = useState(false);
 
   const leadContext: LeadContext | null = useMemo(() => {
     if (!lead) return null;
@@ -81,6 +117,13 @@ export default function LeadDetailsDrawer({ lead, open, onClose }: { lead: LeadR
         if (e.error) throw e.error;
         setMessages((m.data ?? []) as OutreachMessageRow[]);
         setEvents((e.data ?? []) as StageEventRow[]);
+        setNewText("");
+        setNewDirection("sent");
+        setTab(initialTab);
+        setFollowUpDate(lead.follow_up_due ?? "");
+        setAiOpen(false);
+        setAiText("");
+        setAiCopied(false);
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "Failed to load lead details";
@@ -88,6 +131,135 @@ export default function LeadDetailsDrawer({ lead, open, onClose }: { lead: LeadR
       })
       .finally(() => setLoading(false));
   }, [lead, open, pushToast]);
+
+  async function toggleClient() {
+    if (!lead) return;
+    setSavingClient(true);
+    try {
+      const next = !(lead.is_client === true);
+      const r = await supabase.from("leads").update({ is_client: next }).eq("id", lead.id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Updated", message: next ? "Moved to Clients" : "Moved to Active leads" });
+      onClose();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update client status";
+      pushToast({ type: "error", title: "Client status", message: msg });
+    } finally {
+      setSavingClient(false);
+    }
+  }
+
+  async function logContact() {
+    if (!lead) return;
+    setSavingContact(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const r = await supabase.from("leads").update({ last_contact_at: nowIso }).eq("id", lead.id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Logged", message: "Contact time updated" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to log contact";
+      pushToast({ type: "error", title: "Log contact", message: msg });
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  async function copyOpener() {
+    if (!lead) return;
+    const owner = (lead.owner_name ?? "").trim();
+    const msg = owner
+      ? `Hi, is this ${owner} from ${lead.business_name}? 👋`
+      : `Hi, is this the owner of ${lead.business_name}? 👋`;
+    try {
+      await navigator.clipboard.writeText(msg);
+      pushToast({ type: "success", title: "Copied", message: "Opener copied" });
+    } catch {
+      pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
+    }
+  }
+
+  async function saveFollowUp(next: string) {
+    if (!lead) return;
+    setSavingFollowUp(true);
+    try {
+      const r = await supabase.from("leads").update({ follow_up_due: next || null }).eq("id", lead.id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Follow-up", message: next ? "Scheduled" : "Cleared" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update follow-up";
+      pushToast({ type: "error", title: "Follow-up", message: msg });
+    } finally {
+      setSavingFollowUp(false);
+    }
+  }
+
+  async function aiRegenerate() {
+    if (!lead) return;
+    setAiLoading(true);
+    try {
+      const last = messages
+        .slice()
+        .reverse()
+        .find((m) => (m.direction ?? "sent") === "sent")?.message_text;
+      const hint = last && last.toLowerCase().includes("hallo") ? "Afrikaans" : null;
+      const suggestion = await requestGeminiSuggestion({
+        lead: {
+          business_name: lead.business_name,
+          owner_name: lead.owner_name,
+          stage: lead.stage,
+          notes: lead.notes,
+        },
+        last_message: last ?? null,
+        conversation_language_hint: hint,
+      });
+      setAiText(suggestion.trim());
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to generate suggestion";
+      pushToast({ type: "error", title: "Suggest reply", message: msg });
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function aiCopy() {
+    const final = aiText.trim();
+    if (!final) return;
+    try {
+      await navigator.clipboard.writeText(final);
+      setAiCopied(true);
+      window.setTimeout(() => setAiCopied(false), 1500);
+      await supabase.from("leads").update({ opener_used: "ai_suggest" }).eq("id", lead?.id ?? "");
+    } catch {
+      pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
+    }
+  }
+
+  async function addMessage() {
+    if (!lead) return;
+    const text = newText.trim();
+    if (!text) return;
+    setSavingMessage(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const r = await supabase.from("outreach_messages").insert({
+        lead_id: lead.id,
+        direction: newDirection,
+        message_text: text,
+        template_id: null,
+        sent_at: nowIso,
+        replied: false,
+      });
+      if (r.error) throw r.error;
+      setNewText("");
+      pushToast({ type: "success", title: "Saved", message: "Message added" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to save message";
+      pushToast({ type: "error", title: "Message", message: msg });
+    } finally {
+      setSavingMessage(false);
+    }
+  }
 
   useEffect(() => {
     if (!open || !lead) return;
@@ -122,6 +294,8 @@ export default function LeadDetailsDrawer({ lead, open, onClose }: { lead: LeadR
 
   const phone = lead?.phone ? normalizePhoneNumber(lead.phone) : "";
   const wa = phone ? `https://wa.me/${phone}` : null;
+  const today = getSaDateString();
+  const overdueDays = lead?.follow_up_due ? daysBetweenSaYmd(today, lead.follow_up_due) : null;
 
   async function copyDemoLink() {
     const url = lead?.demo_url?.trim();
@@ -136,8 +310,9 @@ export default function LeadDetailsDrawer({ lead, open, onClose }: { lead: LeadR
   }
 
   return (
-    <div className={cn("fixed inset-0 z-40", open ? "pointer-events-auto" : "pointer-events-none")}> 
+    <div className={cn("fixed inset-0 z-40", open ? "pointer-events-auto" : "pointer-events-none")}>
       <div onClick={onClose} className={cn("absolute inset-0 bg-black/60 transition-opacity", open ? "opacity-100" : "opacity-0")} />
+
       <div
         className={cn(
           "absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[980px] rounded-t-3xl border border-border bg-panel p-4 transition-transform",
@@ -147,7 +322,7 @@ export default function LeadDetailsDrawer({ lead, open, onClose }: { lead: LeadR
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-base font-semibold">{lead?.business_name ?? "Lead"}</div>
+            <div className="text-base font-semibold text-zinc-100">{lead?.business_name ?? "Lead"}</div>
             <div className="mt-1 text-sm text-zinc-400">{lead?.owner_name ? lead.owner_name : "No owner name"}</div>
           </div>
           <button
@@ -162,134 +337,334 @@ export default function LeadDetailsDrawer({ lead, open, onClose }: { lead: LeadR
 
         {loading ? (
           <div className="mt-4 rounded-2xl border border-border bg-base/40 p-4 text-sm text-zinc-400">Loading…</div>
-        ) : lead ? (
-          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-border bg-base/40 p-3">
-                <div className="text-xs text-zinc-400">Contact</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {wa ? (
-                    <a
-                      href={wa}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-100 hover:bg-white/5"
-                    >
-                      <Phone className="h-4 w-4" />
-                      {phone}
-                    </a>
-                  ) : (
-                    <div className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-500">
-                      <Phone className="h-4 w-4" />
-                      No phone
-                    </div>
-                  )}
-                  {lead.email ? (
-                    <a
-                      href={`mailto:${lead.email}`}
-                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-100 hover:bg-white/5"
-                    >
-                      <Mail className="h-4 w-4" />
-                      Email
-                    </a>
-                  ) : null}
-                  {lead.demo_url ? (
-                    <a
-                      href={lead.demo_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-100 hover:bg-white/5"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Demo
-                    </a>
-                  ) : null}
-                  {lead.demo_url ? (
-                    <button
-                      type="button"
-                      onClick={() => void copyDemoLink()}
-                      className={cn(
-                        "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold",
-                        copiedLink ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "border-border bg-panel text-zinc-100 hover:bg-white/5",
-                      )}
-                    >
-                      <Clipboard className="h-4 w-4" />
-                      {copiedLink ? "Copied" : "Copy link"}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="mt-3 grid gap-2 text-sm">
-                  <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
-                    <span className="text-zinc-400">Stage</span>
-                    <span className="font-semibold text-zinc-100">{formatStageLabel(lead.stage)}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
-                    <span className="text-zinc-400">Niche</span>
-                    <span className="font-semibold text-zinc-100">{lead.niche ?? "—"}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
-                    <span className="text-zinc-400">Last contacted</span>
-                    <span className="font-semibold text-zinc-100">
-                      {lead.last_contact_at ? getSaDateString(new Date(lead.last_contact_at)) : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-border bg-base/40 p-3">
-                <div className="text-xs text-zinc-400">Notes</div>
-                <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{lead.notes?.trim() ? lead.notes : "No notes"}</div>
-              </div>
+        ) : !lead ? null : (
+          <>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setTab("details")}
+                className={cn(
+                  "rounded-xl border px-3 py-2 text-sm font-semibold",
+                  tab === "details" ? "border-purple/30 bg-purple/15 text-purple" : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
+                )}
+              >
+                Details
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("messages")}
+                className={cn(
+                  "rounded-xl border px-3 py-2 text-sm font-semibold",
+                  tab === "messages" ? "border-purple/30 bg-purple/15 text-purple" : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
+                )}
+              >
+                Messages
+              </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-border bg-base/40 p-3">
-                <div className="text-xs text-zinc-400">Message history</div>
-                {messages.length === 0 ? (
-                  <div className="mt-2 text-sm text-zinc-500">No messages logged yet.</div>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {messages.map((m) => (
-                      <div
-                        key={m.id}
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-border bg-base/40 p-3">
+                  <div className="text-xs text-zinc-400">Contact</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {wa ? (
+                      <a
+                        href={wa}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-100 hover:bg-white/5"
+                      >
+                        <Phone className="h-4 w-4" />
+                        {phone}
+                      </a>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-500">
+                        <Phone className="h-4 w-4" />
+                        No phone
+                      </div>
+                    )}
+                    {lead.email ? (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-100 hover:bg-white/5"
+                      >
+                        <Mail className="h-4 w-4" />
+                        Email
+                      </a>
+                    ) : null}
+                    {lead.demo_url ? (
+                      <a
+                        href={lead.demo_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-100 hover:bg-white/5"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Demo
+                      </a>
+                    ) : null}
+                    {lead.demo_url ? (
+                      <button
+                        type="button"
+                        onClick={() => void copyDemoLink()}
                         className={cn(
-                          "rounded-2xl border border-border p-3",
-                          (m.direction ?? "sent") === "received" ? "bg-white/5" : "bg-panel",
+                          "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold",
+                          copiedLink ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "border-border bg-panel text-zinc-100 hover:bg-white/5",
                         )}
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-xs font-semibold text-zinc-300">{(m.direction ?? "sent") === "received" ? "Received" : "Sent"}</div>
-                          <div className="text-xs text-zinc-500">{m.sent_at ? new Date(m.sent_at).toLocaleString() : ""}</div>
-                        </div>
-                        <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{m.message_text ?? ""}</div>
-                      </div>
-                    ))}
+                        <Clipboard className="h-4 w-4" />
+                        {copiedLink ? "Copied" : "Copy link"}
+                      </button>
+                    ) : null}
                   </div>
-                )}
+
+                  <div className="mt-3 grid gap-2 text-sm">
+                    <button
+                      type="button"
+                      disabled={savingContact}
+                      onClick={() => void logContact()}
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-xl border border-border bg-panel px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/5",
+                        savingContact && "opacity-60",
+                      )}
+                    >
+                      Log contact
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => void copyOpener()}
+                      className="inline-flex items-center justify-center rounded-xl border border-border bg-panel px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/5"
+                    >
+                      Copy opener
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAiOpen(true);
+                        void aiRegenerate();
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange/30 bg-orange/15 px-3 py-2 text-sm font-semibold text-orange hover:brightness-110"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Suggest reply
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={savingClient}
+                      onClick={() => void toggleClient()}
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold",
+                        lead.is_client
+                          ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                          : "border-border bg-panel text-zinc-100 hover:bg-white/5",
+                        savingClient && "opacity-60",
+                      )}
+                    >
+                      {lead.is_client ? "Client (tap to move back)" : "Mark as client"}
+                    </button>
+
+                    <div className="grid gap-1 rounded-2xl border border-border bg-panel p-3">
+                      <div className="text-xs text-zinc-400">Follow-up date</div>
+                      <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <input
+                          type="date"
+                          value={followUpDate}
+                          onChange={(e) => setFollowUpDate(e.target.value)}
+                          className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                        />
+                        <button
+                          type="button"
+                          disabled={savingFollowUp}
+                          onClick={() => void saveFollowUp(followUpDate)}
+                          className={cn(
+                            "rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110",
+                            savingFollowUp && "opacity-60",
+                          )}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingFollowUp}
+                          onClick={() => {
+                            setFollowUpDate("");
+                            void saveFollowUp("");
+                          }}
+                          className={cn(
+                            "rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/5",
+                            savingFollowUp && "opacity-60",
+                          )}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="mt-1 text-xs text-zinc-500">
+                        Type: {followUpLabel(lead.follow_up_type)}
+                        {lead.follow_up_due && overdueDays !== null && overdueDays > 0 ? (
+                          <span className="ml-2 text-rose-300">{`${overdueDays}d overdue`}</span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
+                      <span className="text-zinc-400">Stage</span>
+                      <span className="font-semibold text-zinc-100">{formatStageLabel(lead.stage)}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
+                      <span className="text-zinc-400">Niche</span>
+                      <span className="font-semibold text-zinc-100">{lead.niche ?? "—"}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
+                      <span className="text-zinc-400">Last contacted</span>
+                      <span className="font-semibold text-zinc-100">
+                        {lead.last_contact_at ? getSaDateString(new Date(lead.last_contact_at)) : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-base/40 p-3">
+                  <div className="text-xs text-zinc-400">Notes</div>
+                  <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{lead.notes?.trim() ? lead.notes : "No notes"}</div>
+                </div>
               </div>
 
-              <div className="rounded-2xl border border-border bg-base/40 p-3">
-                <div className="text-xs text-zinc-400">Stage timeline</div>
-                {events.length === 0 ? (
-                  <div className="mt-2 text-sm text-zinc-500">No stage events yet.</div>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {events.map((e) => (
-                      <div key={e.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-panel px-3 py-2">
-                        <div className="min-w-0 text-sm text-zinc-200">
-                          <span className="font-semibold">{formatStageLabel(e.to_stage)}</span>
-                          {e.from_stage ? <span className="text-zinc-500">{` (from ${formatStageLabel(e.from_stage)})`}</span> : null}
-                        </div>
-                        <div className="text-xs text-zinc-500">{getSaDateString(new Date(e.changed_at))}</div>
+              <div className="space-y-3">
+                {tab === "messages" ? (
+                  <div className="rounded-2xl border border-border bg-base/40 p-3">
+                    <div className="text-xs text-zinc-400">Message history</div>
+                    <div className="mt-2 grid gap-2 rounded-2xl border border-border bg-panel p-3">
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <select
+                          value={newDirection}
+                          onChange={(e) => setNewDirection(e.target.value as "sent" | "received")}
+                          className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                        >
+                          <option value="sent">Sent</option>
+                          <option value="received">Received</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={savingMessage}
+                          onClick={() => void addMessage()}
+                          className={cn(
+                            "rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110",
+                            savingMessage && "opacity-60",
+                          )}
+                        >
+                          Add
+                        </button>
                       </div>
-                    ))}
+                      <textarea
+                        value={newText}
+                        onChange={(e) => setNewText(e.target.value)}
+                        className="min-h-[84px] w-full rounded-xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                        placeholder="Paste the real WhatsApp message here…"
+                      />
+                    </div>
+                    {messages.length === 0 ? (
+                      <div className="mt-2 text-sm text-zinc-500">No messages logged yet.</div>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {messages.map((m) => (
+                          <div
+                            key={m.id}
+                            className={cn(
+                              "rounded-2xl border border-border p-3",
+                              (m.direction ?? "sent") === "received" ? "bg-white/5" : "bg-panel",
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-xs font-semibold text-zinc-300">{(m.direction ?? "sent") === "received" ? "Received" : "Sent"}</div>
+                              <div className="text-xs text-zinc-500">{m.sent_at ? new Date(m.sent_at).toLocaleString() : ""}</div>
+                            </div>
+                            <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{m.message_text ?? ""}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-border bg-base/40 p-3">
+                    <div className="text-xs text-zinc-400">Stage timeline</div>
+                    {events.length === 0 ? (
+                      <div className="mt-2 text-sm text-zinc-500">No stage events yet.</div>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {events.map((e) => (
+                          <div key={e.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-panel px-3 py-2">
+                            <div className="min-w-0 text-sm text-zinc-200">
+                              <span className="font-semibold">{formatStageLabel(e.to_stage)}</span>
+                              {e.from_stage ? <span className="text-zinc-500">{` (from ${formatStageLabel(e.from_stage)})`}</span> : null}
+                            </div>
+                            <div className="text-xs text-zinc-500">{getSaDateString(new Date(e.changed_at))}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
-          </div>
-        ) : null}
+          </>
+        )}
       </div>
+
+      {aiOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
+          <div className="w-full max-w-2xl rounded-3xl border border-border bg-panel p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-base font-semibold text-zinc-100">Suggested message</div>
+                <div className="mt-1 text-sm text-zinc-400">Edit before sending</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-base/40 text-zinc-200 hover:bg-white/5"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <textarea
+              value={aiText}
+              onChange={(e) => setAiText(e.target.value)}
+              className="mt-4 min-h-[140px] w-full rounded-2xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
+              placeholder={aiLoading ? "Generating…" : ""}
+            />
+
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <button
+                type="button"
+                disabled={aiLoading}
+                onClick={() => void aiRegenerate()}
+                className={cn(
+                  "inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5",
+                  aiLoading && "opacity-60",
+                )}
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Regenerate
+              </button>
+              <button
+                type="button"
+                onClick={() => void aiCopy()}
+                className={cn(
+                  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition",
+                  aiCopied ? "border border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "bg-purple text-black hover:brightness-110",
+                )}
+              >
+                <Check className="h-4 w-4" />
+                {aiCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

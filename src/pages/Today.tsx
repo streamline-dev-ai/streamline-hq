@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, Clipboard, RefreshCcw } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { getSaDateString } from "@/utils/saDate";
+import { daysBetweenSaYmd, getSaDateString } from "@/utils/saDate";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useLocalStorageBoolean } from "@/hooks/useLocalStorageBoolean";
+import { useToast } from "@/components/toast/ToastProvider";
 import OutreachCard from "@/components/today/OutreachCard";
 import TasksCard, { type TodayTask } from "@/components/today/TasksCard";
 import HabitsCard, { type TodayHabits } from "@/components/today/HabitsCard";
@@ -34,6 +36,23 @@ type LeadRow = {
   stage: string | null;
 };
 
+type FollowUpLeadRow = {
+  id: string;
+  business_name: string;
+  owner_name: string | null;
+  stage: string | null;
+  follow_up_due: string | null;
+  follow_up_type: string | null;
+};
+
+function followUpLabel(t: string | null) {
+  const k = (t ?? "").toLowerCase();
+  if (k === "demo_check_in") return "Demo check-in";
+  if (k === "no_reply_check") return "No reply check";
+  if (k === "proposal_follow_up") return "Proposal follow-up";
+  return t ? t.replace(/_/g, " ") : "Follow-up";
+}
+
 function snapshotCheckin(c: DailyCheckinRow) {
   return JSON.stringify({
     outreach_count: c.outreach_count,
@@ -47,11 +66,14 @@ function snapshotCheckin(c: DailyCheckinRow) {
 
 export default function Today() {
   const saDate = useMemo(() => getSaDateString(), []);
+  const navigate = useNavigate();
+  const { pushToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checkin, setCheckin] = useState<DailyCheckinRow | null>(null);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [followUps, setFollowUps] = useState<FollowUpLeadRow[]>([]);
   const [newTaskText, setNewTaskText] = useState("");
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,16 +126,25 @@ export default function Today() {
 
     const tasksPromise = supabase.from("tasks").select("*").eq("date", saDate).order("done", { ascending: true }).limit(3);
     const leadsPromise = supabase.from("leads").select("id, stage");
+    const followUpsPromise = supabase
+      .from("leads")
+      .select("id, business_name, owner_name, stage, follow_up_due, follow_up_type, is_client")
+      .lte("follow_up_due", saDate)
+      .not("stage", "in", "(closed,lost)")
+      .or("is_client.is.null,is_client.eq.false")
+      .order("follow_up_due", { ascending: true });
 
     try {
-      const [checkinRow, tasksRes, leadsRes] = await Promise.all([checkinPromise, tasksPromise, leadsPromise]);
+      const [checkinRow, tasksRes, leadsRes, followUpsRes] = await Promise.all([checkinPromise, tasksPromise, leadsPromise, followUpsPromise]);
       if (tasksRes.error) throw tasksRes.error;
       if (leadsRes.error) throw leadsRes.error;
+      if (followUpsRes.error) throw followUpsRes.error;
 
       lastSavedRef.current = snapshotCheckin(checkinRow);
       setCheckin(checkinRow);
       setTasks((tasksRes.data ?? []) as TaskRow[]);
       setLeads((leadsRes.data ?? []) as LeadRow[]);
+      setFollowUps(((followUpsRes.data ?? []) as any[]).map((l) => l as FollowUpLeadRow));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load";
       setError(msg);
@@ -166,6 +197,18 @@ export default function Today() {
           .select("id, stage")
           .then((r) => {
             if (r.data) setLeads(r.data as LeadRow[]);
+          });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => {
+        supabase
+          .from("leads")
+          .select("id, business_name, owner_name, stage, follow_up_due, follow_up_type, is_client")
+          .lte("follow_up_due", saDate)
+          .not("stage", "in", "(closed,lost)")
+          .or("is_client.is.null,is_client.eq.false")
+          .order("follow_up_due", { ascending: true })
+          .then((r) => {
+            if (r.data) setFollowUps(r.data as unknown as FollowUpLeadRow[]);
           });
       })
       .subscribe();
@@ -251,6 +294,18 @@ export default function Today() {
     }
   }
 
+  async function markFollowUpDone(id: string) {
+    try {
+      const nowIso = new Date().toISOString();
+      const r = await supabase.from("leads").update({ follow_up_due: null, follow_up_type: null, last_contact_at: nowIso }).eq("id", id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Done", message: "Follow-up cleared" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to clear follow-up";
+      pushToast({ type: "error", title: "Follow-up", message: msg });
+    }
+  }
+
   const habits: TodayHabits | null = checkin
     ? {
         morning_routine: checkin.morning_routine,
@@ -265,6 +320,69 @@ export default function Today() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border border-border bg-panel p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Follow-ups due today</div>
+            <div className="mt-1 text-sm text-zinc-400">From your lead reminders (SAST)</div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="h-20 animate-pulse rounded-2xl border border-border bg-base/40" />
+            ))}
+          </div>
+        ) : followUps.length === 0 ? (
+          <div className="mt-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 p-3 text-sm font-semibold text-emerald-300">
+            You're all caught up
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {followUps.map((l) => {
+              const due = l.follow_up_due ?? saDate;
+              const overdue = daysBetweenSaYmd(saDate, due);
+              const isOverdue = overdue > 0;
+              return (
+                <div key={l.id} className="rounded-2xl border border-border bg-base/40 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-zinc-100">{l.business_name}</div>
+                      <div className="mt-0.5 truncate text-xs text-zinc-400">{l.owner_name ?? "—"}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <div className="rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-200">{(l.stage ?? "new").replace(/_/g, " ")}</div>
+                        <div className="rounded-full border border-purple/30 bg-purple/15 px-2 py-1 text-xs font-semibold text-purple">{followUpLabel(l.follow_up_type)}</div>
+                        {isOverdue ? (
+                          <div className="rounded-full border border-rose-500/30 bg-rose-500/15 px-2 py-1 text-xs font-semibold text-rose-300">{`${overdue}d overdue`}</div>
+                        ) : (
+                          <div className="rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-300">Due today</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/leads?lead=${l.id}&tab=messages`)}
+                        className="rounded-xl border border-border bg-panel px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/5"
+                      >
+                        Open Lead
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void markFollowUpDone(l.id)}
+                        className="rounded-xl bg-purple px-3 py-2 text-xs font-semibold text-black hover:brightness-110"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm text-zinc-400">Today</div>
