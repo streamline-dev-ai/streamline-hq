@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, ExternalLink, Phone, RefreshCcw, BarChart3, MessageSquareText } from "lucide-react";
+import { Plus, Search, ExternalLink, Phone, RefreshCcw, BarChart3, MessageSquareText, Upload } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { addDaysToSaYmd, daysBetweenSaYmd, daysSinceSaISOString, getSaDateString } from "@/utils/saDate";
@@ -9,6 +9,10 @@ import LeadsAnalytics from "@/components/leads/LeadsAnalytics";
 import { useSearchParams } from "react-router-dom";
 
 type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost";
+
+type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "other";
+
+const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "other"];
 
 type LeadRow = {
   id: string;
@@ -26,6 +30,66 @@ type LeadRow = {
   notes: string | null;
   opener_used: string | null;
 };
+
+function nicheBadge(niche: string | null) {
+  const n = (niche ?? "").trim().toLowerCase();
+  if (!n) return null;
+  return n;
+}
+
+function isFollowUpDue(lead: LeadRow, today: string) {
+  if (!lead.follow_up_due) return false;
+  const stage = (lead.stage ?? "new").toLowerCase();
+  if (stage === "closed" || stage === "lost") return false;
+  return daysBetweenSaYmd(today, lead.follow_up_due) >= 0;
+}
+
+function parseCsv(text: string) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return [];
+
+  const parseLine = (line: string) => {
+    const out: string[] = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (ch === "," && !inQuotes) {
+        out.push(cur.trim());
+        cur = "";
+        continue;
+      }
+      cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  };
+
+  const header = parseLine(lines[0]).map((h) => h.toLowerCase());
+  const start = header.includes("business_name") ? 1 : 0;
+  const cols = header.includes("business_name") ? header : ["business_name", "owner_name", "phone", "niche", "notes"];
+
+  const rows = [] as Array<Record<string, string>>;
+  for (const line of lines.slice(start)) {
+    const parts = parseLine(line);
+    const row: Record<string, string> = {};
+    for (let i = 0; i < cols.length; i++) row[cols[i]] = parts[i] ?? "";
+    rows.push(row);
+  }
+  return rows;
+}
 
 const STAGES: { key: LeadStage; label: string }[] = [
   { key: "new", label: "New" },
@@ -46,6 +110,8 @@ const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = 
   { key: "proposal_sent", label: "Proposal", stage: "proposal_sent" },
   { key: "closed", label: "Closed", stage: "closed" },
 ];
+
+type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted";
 
 function normalizePhoneNumber(raw: string) {
   return raw.replace(/[^0-9]/g, "");
@@ -114,7 +180,7 @@ type AddLeadForm = {
   owner_name: string;
   phone: string;
   email: string;
-  niche: string;
+  niche: NicheOption;
   notes: string;
   demo_url: string;
 };
@@ -137,7 +203,8 @@ export default function Leads() {
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [tab, setTab] = useState<"pipeline" | "analytics">("pipeline");
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
+  const [filter, setFilter] = useState<LeadsFilterKey>("all");
+  const [nicheFilter, setNicheFilter] = useState<"all" | NicheOption>("all");
   const [query, setQuery] = useState("");
   const copyTimeoutRef = useRef<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -147,14 +214,25 @@ export default function Leads() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsTab, setDetailsTab] = useState<"details" | "messages">("details");
 
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importPreview, setImportPreview] = useState<
+    Array<{ id: string; selected: boolean; business_name: string; owner_name: string; phone: string; niche: string; notes: string }>
+  >([]);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importing, setImporting] = useState(false);
+
   const counts = useMemo(() => {
+    const scoped = nicheFilter === "all" ? leads : leads.filter((l) => (l.niche ?? "").toLowerCase() === nicheFilter);
     const map = new Map<string, number>();
-    for (const l of leads) {
+    for (const l of scoped) {
       const k = (l.stage ?? "new").toLowerCase();
       map.set(k, (map.get(k) ?? 0) + 1);
     }
-    return map;
-  }, [leads]);
+    const followUpDue = scoped.filter((l) => isFollowUpDue(l, saToday)).length;
+    const notContacted = scoped.filter((l) => (l.stage ?? "new").toLowerCase() === "new" && !l.last_contact_at).length;
+    return { map, followUpDue, notContacted, scopedCount: scoped.length };
+  }, [leads, nicheFilter, saToday]);
 
   const stats = useMemo(() => {
     let contactedToday = 0;
@@ -183,7 +261,12 @@ export default function Leads() {
     const q = query.trim().toLowerCase();
     return leads
       .filter((l) => {
+        if (nicheFilter !== "all") {
+          if ((l.niche ?? "").toLowerCase() !== nicheFilter) return false;
+        }
         if (filter === "all") return true;
+        if (filter === "follow_up_due") return isFollowUpDue(l, saToday);
+        if (filter === "not_contacted") return (l.stage ?? "new").toLowerCase() === "new" && !l.last_contact_at;
         return (l.stage ?? "new").toLowerCase() === filter;
       })
       .filter((l) => {
@@ -194,7 +277,7 @@ export default function Leads() {
       })
       .slice()
       .sort(sortLeads);
-  }, [filter, leads, query]);
+  }, [filter, leads, nicheFilter, query, saToday]);
 
   const loadLeads = useCallback(async () => {
     setLoading(true);
@@ -360,6 +443,97 @@ export default function Leads() {
     }
   }
 
+  async function parseImport() {
+    setImportParsing(true);
+    try {
+      const rows = parseCsv(importText);
+      const mapped = rows
+        .map((r, idx) => {
+          const business_name = (r.business_name ?? "").trim();
+          const owner_name = (r.owner_name ?? "").trim();
+          const phone = normalizePhoneNumber((r.phone ?? "").trim());
+          const nicheRaw = (r.niche ?? "").trim().toLowerCase();
+          const niche = (NICHES as unknown as string[]).includes(nicheRaw) ? nicheRaw : nicheRaw ? "other" : "electrical";
+          const notes = (r.notes ?? "").trim();
+          return {
+            id: `${idx}-${crypto.randomUUID()}`,
+            selected: Boolean(business_name),
+            business_name,
+            owner_name,
+            phone,
+            niche,
+            notes,
+          };
+        })
+        .filter((r) => r.business_name);
+
+      setImportPreview(mapped);
+      if (mapped.length === 0) pushToast({ type: "error", title: "Import", message: "No valid rows found" });
+    } finally {
+      setImportParsing(false);
+    }
+  }
+
+  async function importSelected() {
+    const selected = importPreview.filter((r) => r.selected);
+    if (selected.length === 0) {
+      pushToast({ type: "error", title: "Import", message: "No rows selected" });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const phones = Array.from(new Set(selected.map((r) => r.phone).filter(Boolean)));
+      const existing = new Set<string>();
+      if (phones.length) {
+        const existingRes = await supabase.from("leads").select("phone").in("phone", phones);
+        if (existingRes.error) throw existingRes.error;
+        for (const row of existingRes.data ?? []) {
+          const p = normalizePhoneNumber((row as any).phone ?? "");
+          if (p) existing.add(p);
+        }
+      }
+
+      const rowsToInsert = [] as any[];
+      const seenInPaste = new Set<string>();
+      for (const r of selected) {
+        const p = r.phone;
+        if (p) {
+          if (existing.has(p)) continue;
+          if (seenInPaste.has(p)) continue;
+          seenInPaste.add(p);
+        }
+        rowsToInsert.push({
+          business_name: r.business_name,
+          owner_name: r.owner_name || null,
+          phone: r.phone || null,
+          niche: r.niche || "electrical",
+          notes: r.notes || null,
+          stage: "new",
+          last_contact_at: null,
+          is_client: false,
+        });
+      }
+
+      if (rowsToInsert.length === 0) {
+        pushToast({ type: "info", title: "Import", message: "All selected rows were duplicates" });
+        return;
+      }
+
+      const insertRes = await supabase.from("leads").insert(rowsToInsert);
+      if (insertRes.error) throw insertRes.error;
+      pushToast({ type: "success", title: "Imported", message: `${rowsToInsert.length} leads` });
+      setImportOpen(false);
+      setImportText("");
+      setImportPreview([]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to import";
+      pushToast({ type: "error", title: "Import", message: msg });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -383,6 +557,14 @@ export default function Leads() {
           >
             <Plus className="h-4 w-4" />
             Add Lead
+          </button>
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+          >
+            <Upload className="h-4 w-4" />
+            Import leads
           </button>
         </div>
       </div>
@@ -414,10 +596,10 @@ export default function Leads() {
       {tab === "pipeline" ? (
         <>
           <div className="rounded-2xl border border-border bg-panel p-3">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-2">
                 {FILTERS.map((t) => {
-                  const count = t.key === "all" ? leads.length : counts.get(t.key) ?? 0;
+              const count = t.key === "all" ? counts.scopedCount : counts.map.get(t.key) ?? 0;
                   const active = filter === t.key;
                   return (
                     <button
@@ -436,16 +618,72 @@ export default function Leads() {
                     </button>
                   );
                 })}
+
+            <button
+              type="button"
+              onClick={() => setFilter("follow_up_due")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
+                filter === "follow_up_due"
+                  ? "border-orange/30 bg-orange/15 text-orange"
+                  : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+              )}
+            >
+              <span>Follow up due</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs",
+                  filter === "follow_up_due" ? "bg-orange/20 text-orange" : "bg-white/5 text-zinc-300",
+                )}
+              >
+                {counts.followUpDue}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilter("not_contacted")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
+                filter === "not_contacted"
+                  ? "border-rose-500/30 bg-rose-500/15 text-rose-300"
+                  : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+              )}
+            >
+              <span>Not contacted</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs",
+                  filter === "not_contacted" ? "bg-rose-500/20 text-rose-300" : "bg-white/5 text-zinc-300",
+                )}
+              >
+                {counts.notContacted}
+              </span>
+            </button>
               </div>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search business or owner…"
-                  className="w-full rounded-xl border border-border bg-base/40 py-2 pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-purple/40"
-                />
-              </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <select
+              value={nicheFilter}
+              onChange={(e) => setNicheFilter(e.target.value as any)}
+              className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+            >
+              <option value="all">All niches</option>
+              {NICHES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search business or owner…"
+                className="w-full rounded-xl border border-border bg-base/40 py-2 pl-9 pr-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-purple/40"
+              />
+            </div>
+          </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {statCard("Total leads", stats.total)}
@@ -472,12 +710,18 @@ export default function Leads() {
             const stage = (lead.stage ?? "new").toLowerCase();
             const phone = lead.phone ? normalizePhoneNumber(lead.phone) : "";
             const wa = phone ? `https://wa.me/${phone}` : null;
-                const days = lead.last_contact_at ? daysSinceSaISOString(lead.last_contact_at) : null;
-            const followUp = days !== null && days >= 3;
             const notContacted = !lead.last_contact_at;
                 const saving = savingLeadId === lead.id;
-                const due = lead.follow_up_due ? daysBetweenSaYmd(saToday, lead.follow_up_due) >= 0 : false;
-                const dueStage = stage !== "closed" && stage !== "lost";
+                const due = isFollowUpDue(lead, saToday);
+                const niche = nicheBadge(lead.niche);
+                const days = lead.last_contact_at ? daysSinceSaISOString(lead.last_contact_at) : null;
+                const badge: { kind: "due" | "not_contacted" | "days"; label: string } | null = due
+                  ? { kind: "due", label: "Follow up due" }
+                  : notContacted
+                    ? { kind: "not_contacted", label: "Not contacted" }
+                    : days === null
+                      ? null
+                      : { kind: "days", label: days === 0 ? "Today" : `${days}d ago` };
 
             return (
                   <div key={lead.id} className="rounded-2xl border border-border bg-panel p-4">
@@ -485,29 +729,28 @@ export default function Leads() {
                   <div className="min-w-0">
                     <div className="truncate text-base font-semibold text-zinc-100">{lead.business_name}</div>
                     {lead.owner_name ? <div className="mt-0.5 truncate text-sm text-zinc-400">{lead.owner_name}</div> : null}
+                        {niche ? (
+                          <div className="mt-1 inline-flex items-center rounded-full border border-border bg-white/5 px-2 py-0.5 text-[11px] text-zinc-300">
+                            {niche}
+                          </div>
+                        ) : null}
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <div className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", stageBadge(stage))}>
                       {formatStageLabel(stage)}
                     </div>
-                        {due && dueStage ? (
-                          <div className="inline-flex items-center rounded-full border border-orange/30 bg-orange/15 px-2 py-1 text-xs font-semibold text-orange">
-                            Follow up due
+                        {badge ? (
+                          <div
+                            className={cn(
+                              "inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold",
+                              badge.kind === "due" && "border-orange/30 bg-orange/15 text-orange",
+                              badge.kind === "not_contacted" && "border-rose-500/30 bg-rose-500/15 text-rose-300",
+                              badge.kind === "days" && "border-border bg-white/5 text-zinc-300",
+                            )}
+                          >
+                            {badge.label}
                           </div>
                         ) : null}
-                    {notContacted ? (
-                      <div className="inline-flex items-center rounded-full border border-rose-500/30 bg-rose-500/15 px-2 py-1 text-xs font-semibold text-rose-300">
-                        Not contacted
-                      </div>
-                    ) : followUp && stage !== "closed" && stage !== "lost" ? (
-                      <div className="inline-flex items-center rounded-full border border-orange/30 bg-orange/15 px-2 py-1 text-xs font-semibold text-orange">
-                        Follow up
-                      </div>
-                    ) : (
-                      <div className="inline-flex items-center rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-300">
-                        {days === 0 ? "Today" : `${days}d ago`}
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -654,12 +897,17 @@ export default function Leads() {
             </div>
             <div className="grid gap-1">
               <label className="text-xs text-zinc-400">Niche</label>
-              <input
+              <select
                 value={form.niche}
-                onChange={(e) => setForm((p) => ({ ...p, niche: e.target.value }))}
+                onChange={(e) => setForm((p) => ({ ...p, niche: e.target.value as NicheOption }))}
                 className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
-                placeholder="electrical"
-              />
+              >
+                {NICHES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid gap-1">
               <label className="text-xs text-zinc-400">Demo URL</label>
@@ -699,6 +947,106 @@ export default function Leads() {
               Save Lead
             </button>
           </div>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "fixed inset-0 z-40 transition",
+          importOpen ? "pointer-events-auto" : "pointer-events-none"
+        )}
+      >
+        <div
+          onClick={() => setImportOpen(false)}
+          className={cn("absolute inset-0 bg-black/60 transition-opacity", importOpen ? "opacity-100" : "opacity-0")}
+        />
+        <div
+          className={cn(
+            "absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[980px] rounded-t-3xl border border-border bg-panel p-4 transition-transform",
+            "pb-[calc(env(safe-area-inset-bottom)+16px)]",
+            importOpen ? "translate-y-0" : "translate-y-full"
+          )}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-base font-semibold">Import leads</div>
+              <div className="mt-1 text-sm text-zinc-400">Paste CSV: `business_name,owner_name,phone,niche,notes`</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImportOpen(false)}
+              className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              className="min-h-[160px] w-full rounded-2xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
+              placeholder="business_name,owner_name,phone,niche,notes\nEddie's Electrical,Eddie,27832350718,electrical,\n"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={importParsing}
+                onClick={() => void parseImport()}
+                className={cn(
+                  "rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/5",
+                  importParsing && "opacity-60"
+                )}
+              >
+                Parse & Preview
+              </button>
+              <button
+                type="button"
+                disabled={importing}
+                onClick={() => void importSelected()}
+                className={cn("rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110", importing && "opacity-60")}
+              >
+                Import selected
+              </button>
+            </div>
+          </div>
+
+          {importPreview.length ? (
+            <div className="mt-4 overflow-auto rounded-2xl border border-border">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-base/40 text-xs text-zinc-400">
+                  <tr>
+                    <th className="p-2">Use</th>
+                    <th className="p-2">Business</th>
+                    <th className="p-2">Owner</th>
+                    <th className="p-2">Phone</th>
+                    <th className="p-2">Niche</th>
+                    <th className="p-2">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.map((r) => (
+                    <tr key={r.id} className="border-t border-border bg-panel">
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={r.selected}
+                          onChange={(e) =>
+                            setImportPreview((prev) => prev.map((x) => (x.id === r.id ? { ...x, selected: e.target.checked } : x)))
+                          }
+                        />
+                      </td>
+                      <td className="p-2 text-zinc-100">{r.business_name}</td>
+                      <td className="p-2 text-zinc-300">{r.owner_name || "—"}</td>
+                      <td className="p-2 text-zinc-300">{r.phone || "—"}</td>
+                      <td className="p-2 text-zinc-300">{r.niche}</td>
+                      <td className="p-2 text-zinc-400">{r.notes ? (r.notes.length > 60 ? `${r.notes.slice(0, 60)}…` : r.notes) : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
       </div>
 

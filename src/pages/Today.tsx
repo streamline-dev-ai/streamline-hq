@@ -3,7 +3,7 @@ import { AlertTriangle, Check, Clipboard, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { daysBetweenSaYmd, getSaDateString } from "@/utils/saDate";
+import { addDaysToSaYmd, daysBetweenSaYmd, daysSinceSaISOString, getSaDateString } from "@/utils/saDate";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useLocalStorageBoolean } from "@/hooks/useLocalStorageBoolean";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -41,6 +41,8 @@ type FollowUpLeadRow = {
   business_name: string;
   owner_name: string | null;
   stage: string | null;
+  last_contact_at?: string | null;
+  phone?: string | null;
   follow_up_due: string | null;
   follow_up_type: string | null;
 };
@@ -51,6 +53,30 @@ function followUpLabel(t: string | null) {
   if (k === "no_reply_check") return "No reply check";
   if (k === "proposal_follow_up") return "Proposal follow-up";
   return t ? t.replace(/_/g, " ") : "Follow-up";
+}
+
+function followUpText(stage: string | null, business: string, owner: string | null) {
+  const who = (owner ?? "").trim() ? owner!.trim() : "there";
+  const s = (stage ?? "new").toLowerCase();
+  if (s === "messaged") {
+    return `Hi ${who}, just checking if you got my message — I built a demo website for ${business}. Want me to send it through?`;
+  }
+  if (s === "demo_sent") {
+    return `Hi ${who}, just checking if you had a chance to look at the demo I sent? Happy to walk you through it on a quick call if easier`;
+  }
+  if (s === "replied") {
+    return `Hi ${who}, following up on our chat — still happy to get ${business} online. Want to take a look?`;
+  }
+  return `Hi ${who}, just checking in — do you want me to send you a quick demo for ${business}?`;
+}
+
+function openerText(business: string, owner: string | null) {
+  const who = (owner ?? "").trim();
+  return who ? `Hi, is this ${who} from ${business}?` : `Hi, is this the owner of ${business}?`;
+}
+
+function normalizePhoneNumber(raw: string) {
+  return raw.replace(/[^0-9]/g, "");
 }
 
 function snapshotCheckin(c: DailyCheckinRow) {
@@ -74,6 +100,9 @@ export default function Today() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [followUps, setFollowUps] = useState<FollowUpLeadRow[]>([]);
+  const [newLeads, setNewLeads] = useState<FollowUpLeadRow[]>([]);
+  const [copiedFollowUpId, setCopiedFollowUpId] = useState<string | null>(null);
+  const [copiedNewLeadId, setCopiedNewLeadId] = useState<string | null>(null);
   const [newTaskText, setNewTaskText] = useState("");
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -128,23 +157,40 @@ export default function Today() {
     const leadsPromise = supabase.from("leads").select("id, stage");
     const followUpsPromise = supabase
       .from("leads")
-      .select("id, business_name, owner_name, stage, follow_up_due, follow_up_type, is_client")
+      .select("id, business_name, owner_name, stage, last_contact_at, follow_up_due, follow_up_type, is_client")
       .lte("follow_up_due", saDate)
       .not("stage", "in", "(closed,lost)")
       .or("is_client.is.null,is_client.eq.false")
       .order("follow_up_due", { ascending: true });
 
+    const newLeadsPromise = supabase
+      .from("leads")
+      .select("id, business_name, owner_name, phone, stage, last_contact_at, is_client")
+      .eq("stage", "new")
+      .is("last_contact_at", null)
+      .or("is_client.is.null,is_client.eq.false")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
     try {
-      const [checkinRow, tasksRes, leadsRes, followUpsRes] = await Promise.all([checkinPromise, tasksPromise, leadsPromise, followUpsPromise]);
+      const [checkinRow, tasksRes, leadsRes, followUpsRes, newLeadsRes] = await Promise.all([
+        checkinPromise,
+        tasksPromise,
+        leadsPromise,
+        followUpsPromise,
+        newLeadsPromise,
+      ]);
       if (tasksRes.error) throw tasksRes.error;
       if (leadsRes.error) throw leadsRes.error;
       if (followUpsRes.error) throw followUpsRes.error;
+      if (newLeadsRes.error) throw newLeadsRes.error;
 
       lastSavedRef.current = snapshotCheckin(checkinRow);
       setCheckin(checkinRow);
       setTasks((tasksRes.data ?? []) as TaskRow[]);
       setLeads((leadsRes.data ?? []) as LeadRow[]);
       setFollowUps(((followUpsRes.data ?? []) as any[]).map((l) => l as FollowUpLeadRow));
+      setNewLeads(((newLeadsRes.data ?? []) as any[]).map((l) => l as FollowUpLeadRow));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load";
       setError(msg);
@@ -202,13 +248,26 @@ export default function Today() {
       .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => {
         supabase
           .from("leads")
-          .select("id, business_name, owner_name, stage, follow_up_due, follow_up_type, is_client")
+          .select("id, business_name, owner_name, stage, last_contact_at, follow_up_due, follow_up_type, is_client")
           .lte("follow_up_due", saDate)
           .not("stage", "in", "(closed,lost)")
           .or("is_client.is.null,is_client.eq.false")
           .order("follow_up_due", { ascending: true })
           .then((r) => {
             if (r.data) setFollowUps(r.data as unknown as FollowUpLeadRow[]);
+          });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => {
+        supabase
+          .from("leads")
+          .select("id, business_name, owner_name, phone, stage, last_contact_at, is_client")
+          .eq("stage", "new")
+          .is("last_contact_at", null)
+          .or("is_client.is.null,is_client.eq.false")
+          .order("created_at", { ascending: false })
+          .limit(5)
+          .then((r) => {
+            if (r.data) setNewLeads(r.data as unknown as FollowUpLeadRow[]);
           });
       })
       .subscribe();
@@ -294,15 +353,34 @@ export default function Today() {
     }
   }
 
-  async function markFollowUpDone(id: string) {
+  async function markFollowUpSent(id: string) {
     try {
       const nowIso = new Date().toISOString();
-      const r = await supabase.from("leads").update({ follow_up_due: null, follow_up_type: null, last_contact_at: nowIso }).eq("id", id);
+      const nextDue = addDaysToSaYmd(saDate, 3);
+      const r = await supabase.from("leads").update({ last_contact_at: nowIso, follow_up_due: nextDue }).eq("id", id);
       if (r.error) throw r.error;
-      pushToast({ type: "success", title: "Done", message: "Follow-up cleared" });
+      pushToast({ type: "success", title: "Sent", message: "Follow-up scheduled" });
+      setCopiedFollowUpId(null);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to clear follow-up";
+      const msg = e instanceof Error ? e.message : "Failed to mark as sent";
       pushToast({ type: "error", title: "Follow-up", message: msg });
+    }
+  }
+
+  async function markNewLeadMessaged(id: string) {
+    try {
+      const nowIso = new Date().toISOString();
+      const nextDue = addDaysToSaYmd(saDate, 3);
+      const r = await supabase
+        .from("leads")
+        .update({ stage: "messaged", last_contact_at: nowIso, follow_up_due: nextDue, follow_up_type: "no_reply_check" })
+        .eq("id", id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Messaged", message: "Follow-up scheduled" });
+      setCopiedNewLeadId(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to mark as messaged";
+      pushToast({ type: "error", title: "New leads", message: msg });
     }
   }
 
@@ -341,26 +419,24 @@ export default function Today() {
         ) : (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {followUps.map((l) => {
-              const due = l.follow_up_due ?? saDate;
-              const overdue = daysBetweenSaYmd(saDate, due);
-              const isOverdue = overdue > 0;
+              const message = followUpText(l.stage, l.business_name, l.owner_name);
+              const since = l.last_contact_at ? daysSinceSaISOString(l.last_contact_at) : null;
+              const copied = copiedFollowUpId === l.id;
               return (
                 <div key={l.id} className="rounded-2xl border border-border bg-base/40 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-zinc-100">{l.business_name}</div>
-                      <div className="mt-0.5 truncate text-xs text-zinc-400">{l.owner_name ?? "—"}</div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <div className="rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-200">{(l.stage ?? "new").replace(/_/g, " ")}</div>
-                        <div className="rounded-full border border-purple/30 bg-purple/15 px-2 py-1 text-xs font-semibold text-purple">{followUpLabel(l.follow_up_type)}</div>
-                        {isOverdue ? (
-                          <div className="rounded-full border border-rose-500/30 bg-rose-500/15 px-2 py-1 text-xs font-semibold text-rose-300">{`${overdue}d overdue`}</div>
-                        ) : (
-                          <div className="rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-300">Due today</div>
-                        )}
+                  <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-zinc-100">{l.business_name}</div>
+                        <div className="mt-0.5 truncate text-xs text-zinc-400">{l.owner_name ?? "—"}</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <div className="rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-200">{(l.stage ?? "new").replace(/_/g, " ")}</div>
+                          <div className="rounded-full border border-purple/30 bg-purple/15 px-2 py-1 text-xs font-semibold text-purple">{followUpLabel(l.follow_up_type)}</div>
+                          <div className="rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-300">
+                            {since === null ? "Not contacted" : since === 0 ? "Contacted today" : `${since}d since contact`}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
                       <button
                         type="button"
                         onClick={() => navigate(`/leads?lead=${l.id}&tab=messages`)}
@@ -368,15 +444,110 @@ export default function Today() {
                       >
                         Open Lead
                       </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(message);
+                          setCopiedFollowUpId(l.id);
+                        } catch {
+                          pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
+                        }
+                      }}
+                      className="mt-3 w-full rounded-2xl border border-border bg-panel px-3 py-3 text-left text-sm text-zinc-100 hover:bg-white/5"
+                    >
+                      <div className="text-xs text-zinc-400">Tap to copy</div>
+                      <div className="mt-1 whitespace-pre-wrap">{message}</div>
+                    </button>
+
+                    {copied ? (
                       <button
                         type="button"
-                        onClick={() => void markFollowUpDone(l.id)}
-                        className="rounded-xl bg-purple px-3 py-2 text-xs font-semibold text-black hover:brightness-110"
+                        onClick={() => void markFollowUpSent(l.id)}
+                        className="mt-2 w-full rounded-xl bg-purple px-3 py-2 text-sm font-semibold text-black hover:brightness-110"
                       >
-                        Done
+                        Mark as sent
                       </button>
-                    </div>
+                    ) : null}
                   </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-panel p-4">
+        <div className="text-sm font-semibold">New leads to message today</div>
+        <div className="mt-1 text-sm text-zinc-400">5 fresh leads (stage=new, not contacted)</div>
+
+        {loading ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="h-20 animate-pulse rounded-2xl border border-border bg-base/40" />
+            ))}
+          </div>
+        ) : newLeads.length === 0 ? (
+          <div className="mt-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 p-3 text-sm font-semibold text-emerald-300">
+            Nothing new to message
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {newLeads.map((l) => {
+              const phone = l.phone ? normalizePhoneNumber(l.phone) : "";
+              const wa = phone ? `https://wa.me/${phone}` : null;
+              const msg = openerText(l.business_name, l.owner_name);
+              const copied = copiedNewLeadId === l.id;
+              return (
+                <div key={l.id} className="rounded-2xl border border-border bg-base/40 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-zinc-100">{l.business_name}</div>
+                      <div className="mt-0.5 truncate text-xs text-zinc-400">{l.owner_name ?? "—"}</div>
+                      {wa ? (
+                        <a href={wa} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-purple hover:underline">
+                          {`wa.me/${phone}`}
+                        </a>
+                      ) : (
+                        <div className="mt-2 text-xs text-zinc-500">No phone</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/leads?lead=${l.id}&tab=messages`)}
+                      className="rounded-xl border border-border bg-panel px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/5"
+                    >
+                      Open Lead
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(msg);
+                        setCopiedNewLeadId(l.id);
+                      } catch {
+                        pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
+                      }
+                    }}
+                    className="mt-3 w-full rounded-2xl border border-border bg-panel px-3 py-3 text-left text-sm text-zinc-100 hover:bg-white/5"
+                  >
+                    <div className="text-xs text-zinc-400">Tap to copy opener</div>
+                    <div className="mt-1 whitespace-pre-wrap">{msg}</div>
+                  </button>
+
+                  {copied ? (
+                    <button
+                      type="button"
+                      onClick={() => void markNewLeadMessaged(l.id)}
+                      className="mt-2 w-full rounded-xl bg-purple px-3 py-2 text-sm font-semibold text-black hover:brightness-110"
+                    >
+                      Mark as messaged
+                    </button>
+                  ) : null}
                 </div>
               );
             })}

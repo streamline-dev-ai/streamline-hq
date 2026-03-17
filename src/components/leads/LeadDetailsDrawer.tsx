@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/toast/ToastProvider";
 import { useLeadContextStore, type LeadContext } from "@/stores/leadContext";
 import { getSaDateString, daysBetweenSaYmd } from "@/utils/saDate";
-import { requestGeminiSuggestion } from "@/lib/gemini";
+import { requestOpenAISuggestion } from "@/lib/openai";
 
 type LeadRow = {
   id: string;
@@ -57,6 +57,10 @@ function followUpLabel(t: string | null) {
 
 type DrawerTab = "details" | "messages";
 
+type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "other";
+
+const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "other"];
+
 export default function LeadDetailsDrawer({
   lead,
   open,
@@ -82,6 +86,8 @@ export default function LeadDetailsDrawer({
   const [savingContact, setSavingContact] = useState(false);
   const [followUpDate, setFollowUpDate] = useState<string>("");
   const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [nicheValue, setNicheValue] = useState<NicheOption>("electrical");
+  const [savingNiche, setSavingNiche] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiText, setAiText] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -121,6 +127,8 @@ export default function LeadDetailsDrawer({
         setNewDirection("sent");
         setTab(initialTab);
         setFollowUpDate(lead.follow_up_due ?? "");
+        const raw = (lead.niche ?? "electrical").toLowerCase();
+        setNicheValue((NICHES as unknown as string[]).includes(raw) ? (raw as NicheOption) : "other");
         setAiOpen(false);
         setAiText("");
         setAiCopied(false);
@@ -194,24 +202,45 @@ export default function LeadDetailsDrawer({
     }
   }
 
+  async function saveNiche(next: NicheOption) {
+    if (!lead) return;
+    setSavingNiche(true);
+    try {
+      const r = await supabase.from("leads").update({ niche: next }).eq("id", lead.id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Niche", message: "Updated" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update niche";
+      pushToast({ type: "error", title: "Niche", message: msg });
+    } finally {
+      setSavingNiche(false);
+    }
+  }
+
   async function aiRegenerate() {
     if (!lead) return;
     setAiLoading(true);
     try {
-      const last = messages
-        .slice()
-        .reverse()
-        .find((m) => (m.direction ?? "sent") === "sent")?.message_text;
-      const hint = last && last.toLowerCase().includes("hallo") ? "Afrikaans" : null;
-      const suggestion = await requestGeminiSuggestion({
+      const lastSent =
+        messages
+          .slice()
+          .reverse()
+          .find((m) => (m.direction ?? "sent") === "sent")?.message_text ?? null;
+      const lastReceived =
+        messages
+          .slice()
+          .reverse()
+          .find((m) => (m.direction ?? "sent") === "received")?.message_text ?? null;
+
+      const suggestion = await requestOpenAISuggestion({
         lead: {
           business_name: lead.business_name,
           owner_name: lead.owner_name,
           stage: lead.stage,
           notes: lead.notes,
         },
-        last_message: last ?? null,
-        conversation_language_hint: hint,
+        last_sent_message: lastSent,
+        last_received_message: lastReceived,
       });
       setAiText(suggestion.trim());
     } catch (e) {
@@ -513,9 +542,26 @@ export default function LeadDetailsDrawer({
                       <span className="text-zinc-400">Stage</span>
                       <span className="font-semibold text-zinc-100">{formatStageLabel(lead.stage)}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
-                      <span className="text-zinc-400">Niche</span>
-                      <span className="font-semibold text-zinc-100">{lead.niche ?? "—"}</span>
+                    <div className="grid gap-1 rounded-xl border border-border bg-panel px-3 py-2">
+                      <div className="text-xs text-zinc-400">Niche</div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={nicheValue}
+                          onChange={(e) => {
+                            const next = e.target.value as NicheOption;
+                            setNicheValue(next);
+                            void saveNiche(next);
+                          }}
+                          className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                        >
+                          {NICHES.map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                        {savingNiche ? <div className="text-xs text-zinc-400">Saving…</div> : null}
+                      </div>
                     </div>
                     <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
                       <span className="text-zinc-400">Last contacted</span>
