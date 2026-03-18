@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Clipboard, ExternalLink, Mail, Phone, X, Sparkles, RefreshCcw, Check } from "lucide-react";
+import { Clipboard, ExternalLink, Mail, Phone, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/toast/ToastProvider";
 import { useLeadContextStore, type LeadContext } from "@/stores/leadContext";
 import { getSaDateString, daysBetweenSaYmd } from "@/utils/saDate";
-import { requestOpenAISuggestion } from "@/lib/openai";
 
 type LeadRow = {
   id: string;
@@ -14,6 +13,7 @@ type LeadRow = {
   phone: string | null;
   email: string | null;
   niche: string | null;
+  language?: string | null;
   is_client: boolean | null;
   follow_up_due: string | null;
   follow_up_type: string | null;
@@ -61,6 +61,8 @@ type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "airco
 
 const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "other"];
 
+type LeadLanguage = "english" | "afrikaans";
+
 export default function LeadDetailsDrawer({
   lead,
   open,
@@ -86,12 +88,10 @@ export default function LeadDetailsDrawer({
   const [savingContact, setSavingContact] = useState(false);
   const [followUpDate, setFollowUpDate] = useState<string>("");
   const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [languageValue, setLanguageValue] = useState<LeadLanguage>("english");
+  const [savingLanguage, setSavingLanguage] = useState(false);
   const [nicheValue, setNicheValue] = useState<NicheOption>("electrical");
   const [savingNiche, setSavingNiche] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiText, setAiText] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiCopied, setAiCopied] = useState(false);
 
   const leadContext: LeadContext | null = useMemo(() => {
     if (!lead) return null;
@@ -129,9 +129,8 @@ export default function LeadDetailsDrawer({
         setFollowUpDate(lead.follow_up_due ?? "");
         const raw = (lead.niche ?? "electrical").toLowerCase();
         setNicheValue((NICHES as unknown as string[]).includes(raw) ? (raw as NicheOption) : "other");
-        setAiOpen(false);
-        setAiText("");
-        setAiCopied(false);
+        const langRaw = (lead.language ?? "english").toLowerCase();
+        setLanguageValue(langRaw === "afrikaans" ? "afrikaans" : "english");
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "Failed to load lead details";
@@ -217,50 +216,18 @@ export default function LeadDetailsDrawer({
     }
   }
 
-  async function aiRegenerate() {
+  async function saveLanguage(next: LeadLanguage) {
     if (!lead) return;
-    setAiLoading(true);
+    setSavingLanguage(true);
     try {
-      const lastSent =
-        messages
-          .slice()
-          .reverse()
-          .find((m) => (m.direction ?? "sent") === "sent")?.message_text ?? null;
-      const lastReceived =
-        messages
-          .slice()
-          .reverse()
-          .find((m) => (m.direction ?? "sent") === "received")?.message_text ?? null;
-
-      const suggestion = await requestOpenAISuggestion({
-        lead: {
-          business_name: lead.business_name,
-          owner_name: lead.owner_name,
-          stage: lead.stage,
-          notes: lead.notes,
-        },
-        last_sent_message: lastSent,
-        last_received_message: lastReceived,
-      });
-      setAiText(suggestion.trim());
+      const r = await supabase.from("leads").update({ language: next }).eq("id", lead.id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Language", message: "Updated" });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to generate suggestion";
-      pushToast({ type: "error", title: "Suggest reply", message: msg });
+      const msg = e instanceof Error ? e.message : "Failed to update language";
+      pushToast({ type: "error", title: "Language", message: msg });
     } finally {
-      setAiLoading(false);
-    }
-  }
-
-  async function aiCopy() {
-    const final = aiText.trim();
-    if (!final) return;
-    try {
-      await navigator.clipboard.writeText(final);
-      setAiCopied(true);
-      window.setTimeout(() => setAiCopied(false), 1500);
-      await supabase.from("leads").update({ opener_used: "ai_suggest" }).eq("id", lead?.id ?? "");
-    } catch {
-      pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
+      setSavingLanguage(false);
     }
   }
 
@@ -344,7 +311,7 @@ export default function LeadDetailsDrawer({
 
       <div
         className={cn(
-          "absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[980px] rounded-t-3xl border border-border bg-panel p-4 transition-transform",
+          "absolute bottom-0 left-0 right-0 mx-auto flex max-h-[calc(100dvh-16px)] w-full max-w-[980px] flex-col overflow-hidden rounded-t-3xl border border-border bg-panel p-4 transition-transform",
           "pb-[calc(env(safe-area-inset-bottom)+16px)]",
           open ? "translate-y-0" : "translate-y-full",
         )}
@@ -364,34 +331,35 @@ export default function LeadDetailsDrawer({
           </button>
         </div>
 
-        {loading ? (
-          <div className="mt-4 rounded-2xl border border-border bg-base/40 p-4 text-sm text-zinc-400">Loading…</div>
-        ) : !lead ? null : (
-          <>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setTab("details")}
-                className={cn(
-                  "rounded-xl border px-3 py-2 text-sm font-semibold",
-                  tab === "details" ? "border-purple/30 bg-purple/15 text-purple" : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
-                )}
-              >
-                Details
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("messages")}
-                className={cn(
-                  "rounded-xl border px-3 py-2 text-sm font-semibold",
-                  tab === "messages" ? "border-purple/30 bg-purple/15 text-purple" : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
-                )}
-              >
-                Messages
-              </button>
-            </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="mt-4 rounded-2xl border border-border bg-base/40 p-4 text-sm text-zinc-400">Loading…</div>
+          ) : !lead ? null : (
+            <>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTab("details")}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm font-semibold",
+                    tab === "details" ? "border-purple/30 bg-purple/15 text-purple" : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
+                  )}
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("messages")}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm font-semibold",
+                    tab === "messages" ? "border-purple/30 bg-purple/15 text-purple" : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
+                  )}
+                >
+                  Messages
+                </button>
+              </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
               <div className="space-y-3">
                 <div className="rounded-2xl border border-border bg-base/40 p-3">
                   <div className="text-xs text-zinc-400">Contact</div>
@@ -470,18 +438,6 @@ export default function LeadDetailsDrawer({
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setAiOpen(true);
-                        void aiRegenerate();
-                      }}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange/30 bg-orange/15 px-3 py-2 text-sm font-semibold text-orange hover:brightness-110"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      Suggest reply
-                    </button>
-
-                    <button
-                      type="button"
                       disabled={savingClient}
                       onClick={() => void toggleClient()}
                       className={cn(
@@ -541,6 +497,42 @@ export default function LeadDetailsDrawer({
                     <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
                       <span className="text-zinc-400">Stage</span>
                       <span className="font-semibold text-zinc-100">{formatStageLabel(lead.stage)}</span>
+                    </div>
+                    <div className="grid gap-1 rounded-xl border border-border bg-panel px-3 py-2">
+                      <div className="text-xs text-zinc-400">Language</div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLanguageValue("english");
+                            void saveLanguage("english");
+                          }}
+                          className={cn(
+                            "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                            languageValue === "english"
+                              ? "border-purple/30 bg-purple/15 text-purple"
+                              : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                          )}
+                        >
+                          English
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLanguageValue("afrikaans");
+                            void saveLanguage("afrikaans");
+                          }}
+                          className={cn(
+                            "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                            languageValue === "afrikaans"
+                              ? "border-purple/30 bg-purple/15 text-purple"
+                              : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                          )}
+                        >
+                          Afrikaans
+                        </button>
+                      </div>
+                      {savingLanguage ? <div className="text-xs text-zinc-400">Saving…</div> : null}
                     </div>
                     <div className="grid gap-1 rounded-xl border border-border bg-panel px-3 py-2">
                       <div className="text-xs text-zinc-400">Niche</div>
@@ -655,62 +647,11 @@ export default function LeadDetailsDrawer({
                 )}
               </div>
             </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
-      {aiOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="w-full max-w-2xl rounded-3xl border border-border bg-panel p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-base font-semibold text-zinc-100">Suggested message</div>
-                <div className="mt-1 text-sm text-zinc-400">Edit before sending</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAiOpen(false)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-base/40 text-zinc-200 hover:bg-white/5"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <textarea
-              value={aiText}
-              onChange={(e) => setAiText(e.target.value)}
-              className="mt-4 min-h-[140px] w-full rounded-2xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
-              placeholder={aiLoading ? "Generating…" : ""}
-            />
-
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <button
-                type="button"
-                disabled={aiLoading}
-                onClick={() => void aiRegenerate()}
-                className={cn(
-                  "inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5",
-                  aiLoading && "opacity-60",
-                )}
-              >
-                <RefreshCcw className="h-4 w-4" />
-                Regenerate
-              </button>
-              <button
-                type="button"
-                onClick={() => void aiCopy()}
-                className={cn(
-                  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition",
-                  aiCopied ? "border border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "bg-purple text-black hover:brightness-110",
-                )}
-              >
-                <Check className="h-4 w-4" />
-                {aiCopied ? "Copied" : "Copy"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

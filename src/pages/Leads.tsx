@@ -7,12 +7,22 @@ import { useToast } from "@/components/toast/ToastProvider";
 import LeadDetailsDrawer from "@/components/leads/LeadDetailsDrawer";
 import LeadsAnalytics from "@/components/leads/LeadsAnalytics";
 import { useSearchParams } from "react-router-dom";
+import {
+  getOutreachMessage,
+  loadOutreachTemplates,
+  OUTREACH_TEMPLATE_META,
+  resetOutreachTemplates,
+  saveOutreachTemplates,
+  type OutreachTemplateKey,
+} from "@/lib/outreach";
 
 type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost";
 
 type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "other";
 
 const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "other"];
+
+type LeadLanguage = "english" | "afrikaans";
 
 type LeadRow = {
   id: string;
@@ -21,6 +31,7 @@ type LeadRow = {
   phone: string | null;
   email: string | null;
   niche: string | null;
+  language?: string | null;
   is_client: boolean | null;
   follow_up_due: string | null;
   follow_up_type: string | null;
@@ -180,6 +191,7 @@ type AddLeadForm = {
   owner_name: string;
   phone: string;
   email: string;
+  language: LeadLanguage;
   niche: NicheOption;
   notes: string;
   demo_url: string;
@@ -190,6 +202,7 @@ const DEFAULT_FORM: AddLeadForm = {
   owner_name: "",
   phone: "",
   email: "",
+  language: "english",
   niche: "electrical",
   notes: "",
   demo_url: "",
@@ -213,11 +226,25 @@ export default function Leads() {
   const [detailsLead, setDetailsLead] = useState<LeadRow | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsTab, setDetailsTab] = useState<"details" | "messages">("details");
+  const [copiedOutreachLeadId, setCopiedOutreachLeadId] = useState<string | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templatesDraft, setTemplatesDraft] = useState<Record<OutreachTemplateKey, string>>(() => loadOutreachTemplates());
 
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importPreview, setImportPreview] = useState<
-    Array<{ id: string; selected: boolean; business_name: string; owner_name: string; phone: string; niche: string; notes: string }>
+    Array<{
+      id: string;
+      selected: boolean;
+      business_name: string;
+      owner_name: string;
+      phone: string;
+      niche: string;
+      notes: string;
+      duplicate: boolean;
+      duplicate_business_name: string | null;
+      action: "insert" | "skip" | "update";
+    }>
   >([]);
   const [importParsing, setImportParsing] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -284,7 +311,9 @@ export default function Leads() {
     try {
       const res = await supabase
         .from("leads")
-        .select("id, business_name, owner_name, phone, email, niche, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used")
+        .select(
+          "id, business_name, owner_name, phone, email, niche, language, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used",
+        )
         .or("is_client.is.null,is_client.eq.false")
         .order("last_contact_at", { ascending: true, nullsFirst: true });
 
@@ -408,6 +437,77 @@ export default function Leads() {
     setDetailsOpen(true);
   }
 
+  async function markOutreachSent(lead: LeadRow) {
+    const prevStage = (lead.stage ?? "new").toLowerCase();
+    const nowIso = new Date().toISOString();
+    const daysSince = lead.last_contact_at ? daysSinceSaISOString(lead.last_contact_at) : null;
+    const isFollowUp = daysSince !== null && daysSince >= 3 && (prevStage === "messaged" || prevStage === "demo_sent");
+
+    let nextStage = prevStage;
+    let follow_up_due: string | null = lead.follow_up_due;
+    let follow_up_type: string | null = lead.follow_up_type;
+
+    if (!isFollowUp) {
+      if (prevStage === "new") {
+        nextStage = "messaged";
+        follow_up_due = addDaysToSaYmd(saToday, 3);
+        follow_up_type = "no_reply_check";
+      } else if (prevStage === "messaged") {
+        nextStage = "replied";
+        follow_up_due = addDaysToSaYmd(saToday, 3);
+        follow_up_type = "no_reply_check";
+      } else if (prevStage === "replied") {
+        nextStage = "demo_sent";
+        follow_up_due = addDaysToSaYmd(saToday, 1);
+        follow_up_type = "demo_check_in";
+      } else if (prevStage === "demo_sent") {
+        nextStage = "demo_sent";
+        follow_up_due = addDaysToSaYmd(saToday, 3);
+        follow_up_type = "demo_check_in";
+      } else {
+        follow_up_due = addDaysToSaYmd(saToday, 3);
+      }
+    } else {
+      follow_up_due = addDaysToSaYmd(saToday, 3);
+      follow_up_type = "no_reply_check";
+    }
+
+    setSavingLeadId(lead.id);
+    setLeads((prev) =>
+      prev
+        .map((l) =>
+          l.id === lead.id ? { ...l, stage: nextStage, last_contact_at: nowIso, follow_up_due, follow_up_type } : l,
+        )
+        .slice()
+        .sort(sortLeads),
+    );
+
+    try {
+      const res = await supabase
+        .from("leads")
+        .update({ stage: nextStage, last_contact_at: nowIso, follow_up_due, follow_up_type })
+        .eq("id", lead.id);
+      if (res.error) throw res.error;
+
+      if (nextStage !== prevStage) {
+        const ev = await supabase.from("lead_stage_events").insert({
+          lead_id: lead.id,
+          from_stage: prevStage ? String(prevStage) : null,
+          to_stage: nextStage,
+        });
+        if (ev.error) pushToast({ type: "error", title: "Stage timeline", message: ev.error.message });
+      }
+
+      pushToast({ type: "success", title: "Sent", message: "Saved + follow-up scheduled" });
+      setCopiedOutreachLeadId(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to mark as sent";
+      pushToast({ type: "error", title: "Outreach", message: msg });
+    } finally {
+      setSavingLeadId((x) => (x === lead.id ? null : x));
+    }
+  }
+
   async function submitLead() {
     const business_name = form.business_name.trim();
     if (!business_name) {
@@ -420,14 +520,29 @@ export default function Leads() {
     const demo_url = form.demo_url.trim() || null;
 
     const niche = form.niche.trim() || null;
+    const language = form.language || "english";
     const email = form.email.trim() || null;
     const notes = form.notes.trim() || null;
 
     try {
+      if (phone) {
+        const dup = await supabase.from("leads").select("id, business_name").eq("phone", phone).limit(1);
+        if (dup.error) throw dup.error;
+        const hit = (dup.data ?? [])[0] as { id?: string; business_name?: string } | undefined;
+        if (hit?.id) {
+          pushToast({
+            type: "error",
+            title: "Duplicate",
+            message: `This number already exists as ${hit.business_name ?? "an existing lead"}`,
+          });
+          return;
+        }
+      }
+
       const res = await supabase
         .from("leads")
-        .insert({ business_name, owner_name, phone, email, niche, demo_url, notes, stage: "new", last_contact_at: null })
-        .select("id, business_name, owner_name, phone, email, niche, is_client, stage, last_contact_at, demo_url, notes, opener_used")
+        .insert({ business_name, owner_name, phone, email, niche, language, demo_url, notes, stage: "new", last_contact_at: null })
+        .select("id, business_name, owner_name, phone, email, niche, language, is_client, stage, last_contact_at, demo_url, notes, opener_used")
         .single();
       if (res.error) throw res.error;
       if (res.data) {
@@ -447,7 +562,7 @@ export default function Leads() {
     setImportParsing(true);
     try {
       const rows = parseCsv(importText);
-      const mapped = rows
+      const base = rows
         .map((r, idx) => {
           const business_name = (r.business_name ?? "").trim();
           const owner_name = (r.owner_name ?? "").trim();
@@ -467,6 +582,31 @@ export default function Leads() {
         })
         .filter((r) => r.business_name);
 
+      const phones = Array.from(new Set(base.map((r) => r.phone).filter(Boolean)));
+      const existingByPhone = new Map<string, string>();
+      if (phones.length) {
+        const existingRes = await supabase.from("leads").select("phone, business_name").in("phone", phones);
+        if (existingRes.error) throw existingRes.error;
+        for (const row of existingRes.data ?? []) {
+          const p = normalizePhoneNumber((row as any).phone ?? "");
+          const b = String((row as any).business_name ?? "");
+          if (p) existingByPhone.set(p, b);
+        }
+      }
+
+      const seenInPaste = new Set<string>();
+      const mapped = base.map((r) => {
+        const p = r.phone;
+        const duplicateExisting = p ? existingByPhone.has(p) : false;
+        const duplicatePaste = p ? seenInPaste.has(p) : false;
+        if (p) seenInPaste.add(p);
+
+        const duplicate = duplicateExisting || duplicatePaste;
+        const duplicate_business_name = duplicateExisting ? existingByPhone.get(p) ?? null : duplicatePaste ? "Duplicate in paste" : null;
+        const action: "insert" | "skip" | "update" = duplicateExisting ? "skip" : duplicatePaste ? "skip" : "insert";
+        return { ...r, duplicate, duplicate_business_name, action };
+      });
+
       setImportPreview(mapped);
       if (mapped.length === 0) pushToast({ type: "error", title: "Import", message: "No valid rows found" });
     } finally {
@@ -475,7 +615,7 @@ export default function Leads() {
   }
 
   async function importSelected() {
-    const selected = importPreview.filter((r) => r.selected);
+    const selected = importPreview.filter((r) => r.selected && r.action !== "skip");
     if (selected.length === 0) {
       pushToast({ type: "error", title: "Import", message: "No rows selected" });
       return;
@@ -484,25 +624,40 @@ export default function Leads() {
     setImporting(true);
     try {
       const phones = Array.from(new Set(selected.map((r) => r.phone).filter(Boolean)));
-      const existing = new Set<string>();
+      const existingByPhone = new Map<string, { id: string; business_name: string }>();
       if (phones.length) {
-        const existingRes = await supabase.from("leads").select("phone").in("phone", phones);
+        const existingRes = await supabase.from("leads").select("id, phone, business_name, owner_name, niche, notes").in("phone", phones);
         if (existingRes.error) throw existingRes.error;
         for (const row of existingRes.data ?? []) {
           const p = normalizePhoneNumber((row as any).phone ?? "");
-          if (p) existing.add(p);
+          const id = String((row as any).id ?? "");
+          const b = String((row as any).business_name ?? "");
+          if (p && id) existingByPhone.set(p, { id, business_name: b });
         }
       }
 
       const rowsToInsert = [] as any[];
       const seenInPaste = new Set<string>();
+      const updates: Array<{ id: string; payload: Record<string, any> }> = [];
+
       for (const r of selected) {
         const p = r.phone;
-        if (p) {
-          if (existing.has(p)) continue;
-          if (seenInPaste.has(p)) continue;
-          seenInPaste.add(p);
+        if (p && seenInPaste.has(p)) continue;
+        if (p) seenInPaste.add(p);
+
+        if (r.action === "update" && p && existingByPhone.has(p)) {
+          const existing = existingByPhone.get(p)!;
+          const payload: Record<string, any> = {};
+          if (r.business_name.trim()) payload.business_name = r.business_name.trim();
+          if (r.owner_name.trim()) payload.owner_name = r.owner_name.trim();
+          if (r.niche.trim()) payload.niche = r.niche.trim();
+          if (r.notes.trim()) payload.notes = r.notes.trim();
+          if (Object.keys(payload).length) updates.push({ id: existing.id, payload });
+          continue;
         }
+
+        if (p && existingByPhone.has(p)) continue;
+
         rowsToInsert.push({
           business_name: r.business_name,
           owner_name: r.owner_name || null,
@@ -512,17 +667,31 @@ export default function Leads() {
           stage: "new",
           last_contact_at: null,
           is_client: false,
+          language: "english",
         });
       }
 
-      if (rowsToInsert.length === 0) {
-        pushToast({ type: "info", title: "Import", message: "All selected rows were duplicates" });
+      if (rowsToInsert.length === 0 && updates.length === 0) {
+        pushToast({ type: "info", title: "Import", message: "Nothing to import" });
         return;
       }
 
-      const insertRes = await supabase.from("leads").insert(rowsToInsert);
-      if (insertRes.error) throw insertRes.error;
-      pushToast({ type: "success", title: "Imported", message: `${rowsToInsert.length} leads` });
+      if (rowsToInsert.length) {
+        const insertRes = await supabase.from("leads").insert(rowsToInsert);
+        if (insertRes.error) throw insertRes.error;
+      }
+
+      if (updates.length) {
+        const results = await Promise.all(updates.map((u) => supabase.from("leads").update(u.payload).eq("id", u.id)));
+        const err = results.find((r) => r.error)?.error;
+        if (err) throw err;
+      }
+
+      pushToast({
+        type: "success",
+        title: "Imported",
+        message: `${rowsToInsert.length} inserted, ${updates.length} updated`,
+      });
       setImportOpen(false);
       setImportText("");
       setImportPreview([]);
@@ -565,6 +734,16 @@ export default function Leads() {
           >
             <Upload className="h-4 w-4" />
             Import leads
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTemplatesDraft(loadOutreachTemplates());
+              setTemplatesOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+          >
+            Edit templates
           </button>
         </div>
       </div>
@@ -786,6 +965,56 @@ export default function Leads() {
 
                 {lead.notes ? <div className="mt-3 text-sm text-zinc-300">{notesPreview(lead.notes)}</div> : <div className="mt-3 text-sm text-zinc-500">No notes</div>}
 
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const msg = getOutreachMessage({
+                        stage: lead.stage,
+                        language: lead.language ?? "english",
+                        owner_name: lead.owner_name,
+                        business_name: lead.business_name,
+                        niche: lead.niche,
+                        demo_url: lead.demo_url,
+                        last_contact_at: lead.last_contact_at,
+                      });
+                      await navigator.clipboard.writeText(msg);
+                      setCopiedOutreachLeadId(lead.id);
+                      pushToast({ type: "success", title: "Copied", message: "Message copied" });
+                    } catch {
+                      pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
+                    }
+                  }}
+                  className="mt-3 w-full rounded-2xl border border-border bg-base/40 px-3 py-3 text-left text-sm text-zinc-100 hover:bg-white/5"
+                >
+                  <div className="text-xs text-zinc-400">Tap to copy message</div>
+                  <div className="mt-1 whitespace-pre-wrap">
+                    {getOutreachMessage({
+                      stage: lead.stage,
+                      language: lead.language ?? "english",
+                      owner_name: lead.owner_name,
+                      business_name: lead.business_name,
+                      niche: lead.niche,
+                      demo_url: lead.demo_url,
+                      last_contact_at: lead.last_contact_at,
+                    })}
+                  </div>
+                </button>
+
+                {copiedOutreachLeadId === lead.id ? (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void markOutreachSent(lead)}
+                    className={cn(
+                      "mt-2 w-full rounded-xl bg-purple px-3 py-2 text-sm font-semibold text-black hover:brightness-110",
+                      saving && "opacity-60",
+                    )}
+                  >
+                    Mark as sent
+                  </button>
+                ) : null}
+
                 <div className="mt-4 grid gap-2">
                   <div className="grid grid-cols-1 gap-2">
                     <label className="text-xs text-zinc-400">Update Stage</label>
@@ -894,6 +1123,35 @@ export default function Leads() {
                 className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
                 placeholder="name@example.com"
               />
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs text-zinc-400">Language</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, language: "english" }))}
+                  className={cn(
+                    "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                    form.language === "english"
+                      ? "border-purple/30 bg-purple/15 text-purple"
+                      : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                  )}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, language: "afrikaans" }))}
+                  className={cn(
+                    "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                    form.language === "afrikaans"
+                      ? "border-purple/30 bg-purple/15 text-purple"
+                      : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                  )}
+                >
+                  Afrikaans
+                </button>
+              </div>
             </div>
             <div className="grid gap-1">
               <label className="text-xs text-zinc-400">Niche</label>
@@ -1017,6 +1275,8 @@ export default function Leads() {
                 <thead className="bg-base/40 text-xs text-zinc-400">
                   <tr>
                     <th className="p-2">Use</th>
+                    <th className="p-2">Status</th>
+                    <th className="p-2">Action</th>
                     <th className="p-2">Business</th>
                     <th className="p-2">Owner</th>
                     <th className="p-2">Phone</th>
@@ -1026,7 +1286,13 @@ export default function Leads() {
                 </thead>
                 <tbody>
                   {importPreview.map((r) => (
-                    <tr key={r.id} className="border-t border-border bg-panel">
+                    <tr
+                      key={r.id}
+                      className={cn(
+                        "border-t border-border bg-panel",
+                        r.duplicate && "bg-rose-500/10",
+                      )}
+                    >
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -1035,6 +1301,33 @@ export default function Leads() {
                             setImportPreview((prev) => prev.map((x) => (x.id === r.id ? { ...x, selected: e.target.checked } : x)))
                           }
                         />
+                      </td>
+                      <td className="p-2 text-zinc-300">
+                        {r.duplicate ? (
+                          <span className="font-semibold text-rose-300">{`Duplicate${r.duplicate_business_name ? `: ${r.duplicate_business_name}` : ""}`}</span>
+                        ) : (
+                          <span className="text-emerald-300">New</span>
+                        )}
+                      </td>
+                      <td className="p-2">
+                        {r.duplicate ? (
+                          <select
+                            value={r.action}
+                            onChange={(e) =>
+                              setImportPreview((prev) =>
+                                prev.map((x) =>
+                                  x.id === r.id ? { ...x, action: e.target.value as any, selected: true } : x,
+                                ),
+                              )
+                            }
+                            className="rounded-xl border border-border bg-base/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple/40"
+                          >
+                            <option value="skip">Skip</option>
+                            <option value="update">Update existing</option>
+                          </select>
+                        ) : (
+                          <div className="text-xs font-semibold text-zinc-300">Insert</div>
+                        )}
                       </td>
                       <td className="p-2 text-zinc-100">{r.business_name}</td>
                       <td className="p-2 text-zinc-300">{r.owner_name || "—"}</td>
@@ -1047,6 +1340,74 @@ export default function Leads() {
               </table>
             </div>
           ) : null}
+        </div>
+      </div>
+
+      <div className={cn("fixed inset-0 z-40 transition", templatesOpen ? "pointer-events-auto" : "pointer-events-none")}>
+        <div
+          onClick={() => setTemplatesOpen(false)}
+          className={cn("absolute inset-0 bg-black/60 transition-opacity", templatesOpen ? "opacity-100" : "opacity-0")}
+        />
+        <div
+          className={cn(
+            "absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[980px] rounded-t-3xl border border-border bg-panel p-4 transition-transform",
+            "pb-[calc(env(safe-area-inset-bottom)+16px)]",
+            templatesOpen ? "translate-y-0" : "translate-y-full",
+          )}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-base font-semibold">Outreach templates</div>
+              <div className="mt-1 text-sm text-zinc-400">Variables: {"{owner_name}"} {"{business_name}"} {"{niche}"} {"{demo_url}"}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTemplatesOpen(false)}
+              className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="mt-4 max-h-[60vh] overflow-auto rounded-2xl border border-border">
+            <div className="grid gap-3 p-3">
+              {OUTREACH_TEMPLATE_META.map((t) => (
+                <div key={t.key} className="grid gap-1">
+                  <div className="text-xs font-semibold text-zinc-300">{t.label}</div>
+                  <textarea
+                    value={templatesDraft[t.key]}
+                    onChange={(e) => setTemplatesDraft((p) => ({ ...p, [t.key]: e.target.value }))}
+                    className="min-h-[72px] w-full rounded-xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                resetOutreachTemplates();
+                setTemplatesDraft(loadOutreachTemplates());
+                pushToast({ type: "info", title: "Templates", message: "Reset to defaults" });
+              }}
+              className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5"
+            >
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                saveOutreachTemplates(templatesDraft);
+                setTemplatesOpen(false);
+                pushToast({ type: "success", title: "Templates", message: "Saved" });
+              }}
+              className="rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110"
+            >
+              Save templates
+            </button>
+          </div>
         </div>
       </div>
 
