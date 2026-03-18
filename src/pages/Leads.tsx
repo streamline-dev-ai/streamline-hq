@@ -215,6 +215,7 @@ export default function Leads() {
   const saMonth = useMemo(() => saToday.slice(0, 7), [saToday]);
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [languageEnabled, setLanguageEnabled] = useState(true);
   const [tab, setTab] = useState<"pipeline" | "analytics">("pipeline");
   const [filter, setFilter] = useState<LeadsFilterKey>("all");
   const [nicheFilter, setNicheFilter] = useState<"all" | NicheOption>("all");
@@ -309,23 +310,43 @@ export default function Leads() {
   const loadLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await supabase
-        .from("leads")
-        .select(
-          "id, business_name, owner_name, phone, email, niche, language, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used",
-        )
-        .or("is_client.is.null,is_client.eq.false")
-        .order("last_contact_at", { ascending: true, nullsFirst: true });
+      const selectWithLanguage =
+        "id, business_name, owner_name, phone, email, niche, language, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used";
+      const selectWithoutLanguage =
+        "id, business_name, owner_name, phone, email, niche, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used";
 
-      if (res.error) throw res.error;
-      setLeads(((res.data ?? []) as LeadRow[]).slice().sort(sortLeads));
+      const run = async (includeLanguage: boolean) => {
+        return await supabase
+          .from("leads")
+          .select((includeLanguage ? selectWithLanguage : selectWithoutLanguage) as any)
+          .or("is_client.is.null,is_client.eq.false")
+          .order("last_contact_at", { ascending: true, nullsFirst: true });
+      };
+
+      const res = await run(languageEnabled);
+      if (!res.error) {
+        setLeads(((res.data ?? []) as unknown as LeadRow[]).slice().sort(sortLeads));
+        return;
+      }
+
+      const msg = String(res.error.message ?? "");
+      const lower = msg.toLowerCase();
+      const looksLikeMissingLanguage =
+        languageEnabled && lower.includes("language") && (lower.includes("column") || lower.includes("could not find") || lower.includes("does not exist"));
+
+      if (!looksLikeMissingLanguage) throw res.error;
+
+      setLanguageEnabled(false);
+      const fallback = await run(false);
+      if (fallback.error) throw fallback.error;
+      setLeads(((fallback.data ?? []) as unknown as LeadRow[]).slice().sort(sortLeads));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load leads";
       pushToast({ type: "error", title: "Leads", message: msg });
     } finally {
       setLoading(false);
     }
-  }, [pushToast]);
+  }, [languageEnabled, pushToast]);
 
   useEffect(() => {
     void loadLeads();
@@ -520,7 +541,6 @@ export default function Leads() {
     const demo_url = form.demo_url.trim() || null;
 
     const niche = form.niche.trim() || null;
-    const language = form.language || "english";
     const email = form.email.trim() || null;
     const notes = form.notes.trim() || null;
 
@@ -539,15 +559,30 @@ export default function Leads() {
         }
       }
 
-      const res = await supabase
-        .from("leads")
-        .insert({ business_name, owner_name, phone, email, niche, language, demo_url, notes, stage: "new", last_contact_at: null })
-        .select("id, business_name, owner_name, phone, email, niche, language, is_client, stage, last_contact_at, demo_url, notes, opener_used")
-        .single();
+      const insertPayload: Record<string, any> = {
+        business_name,
+        owner_name,
+        phone,
+        email,
+        niche,
+        demo_url,
+        notes,
+        stage: "new",
+        last_contact_at: null,
+      };
+      if (languageEnabled) insertPayload.language = form.language || "english";
+
+      const select =
+        "id, business_name, owner_name, phone, email, niche, " +
+        (languageEnabled ? "language, " : "") +
+        "is_client, stage, last_contact_at, demo_url, notes, opener_used";
+
+      const res = await supabase.from("leads").insert(insertPayload).select(select as any).single();
       if (res.error) throw res.error;
       if (res.data) {
-        setLeads((prev) => [res.data as LeadRow, ...prev].slice().sort(sortLeads));
-        await supabase.from("lead_stage_events").insert({ lead_id: (res.data as LeadRow).id, from_stage: null, to_stage: "new" });
+        const row = res.data as unknown as LeadRow;
+        setLeads((prev) => [row, ...prev].slice().sort(sortLeads));
+        await supabase.from("lead_stage_events").insert({ lead_id: row.id, from_stage: null, to_stage: "new" });
         pushToast({ type: "success", title: "Added", message: business_name });
       }
       setDrawerOpen(false);
@@ -658,7 +693,7 @@ export default function Leads() {
 
         if (p && existingByPhone.has(p)) continue;
 
-        rowsToInsert.push({
+        const payload: Record<string, any> = {
           business_name: r.business_name,
           owner_name: r.owner_name || null,
           phone: r.phone || null,
@@ -667,8 +702,9 @@ export default function Leads() {
           stage: "new",
           last_contact_at: null,
           is_client: false,
-          language: "english",
-        });
+        };
+        if (languageEnabled) payload.language = "english";
+        rowsToInsert.push(payload);
       }
 
       if (rowsToInsert.length === 0 && updates.length === 0) {
@@ -1124,35 +1160,37 @@ export default function Leads() {
                 placeholder="name@example.com"
               />
             </div>
-            <div className="grid gap-1">
-              <label className="text-xs text-zinc-400">Language</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm((p) => ({ ...p, language: "english" }))}
-                  className={cn(
-                    "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
-                    form.language === "english"
-                      ? "border-purple/30 bg-purple/15 text-purple"
-                      : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
-                  )}
-                >
-                  English
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm((p) => ({ ...p, language: "afrikaans" }))}
-                  className={cn(
-                    "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
-                    form.language === "afrikaans"
-                      ? "border-purple/30 bg-purple/15 text-purple"
-                      : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
-                  )}
-                >
-                  Afrikaans
-                </button>
+            {languageEnabled ? (
+              <div className="grid gap-1">
+                <label className="text-xs text-zinc-400">Language</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, language: "english" }))}
+                    className={cn(
+                      "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                      form.language === "english"
+                        ? "border-purple/30 bg-purple/15 text-purple"
+                        : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                    )}
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, language: "afrikaans" }))}
+                    className={cn(
+                      "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                      form.language === "afrikaans"
+                        ? "border-purple/30 bg-purple/15 text-purple"
+                        : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                    )}
+                  >
+                    Afrikaans
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : null}
             <div className="grid gap-1">
               <label className="text-xs text-zinc-400">Niche</label>
               <select
@@ -1415,6 +1453,7 @@ export default function Leads() {
         lead={detailsLead}
         open={detailsOpen}
         initialTab={detailsTab}
+        languageEnabled={languageEnabled}
         onClose={() => {
           setDetailsOpen(false);
         }}

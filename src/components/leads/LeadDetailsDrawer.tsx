@@ -68,11 +68,13 @@ export default function LeadDetailsDrawer({
   open,
   onClose,
   initialTab = "details",
+  languageEnabled = true,
 }: {
   lead: LeadRow | null;
   open: boolean;
   onClose: () => void;
   initialTab?: DrawerTab;
+  languageEnabled?: boolean;
 }) {
   const { pushToast } = useToast();
   const setActiveLead = useLeadContextStore((s) => s.setActiveLead);
@@ -129,15 +131,17 @@ export default function LeadDetailsDrawer({
         setFollowUpDate(lead.follow_up_due ?? "");
         const raw = (lead.niche ?? "electrical").toLowerCase();
         setNicheValue((NICHES as unknown as string[]).includes(raw) ? (raw as NicheOption) : "other");
-        const langRaw = (lead.language ?? "english").toLowerCase();
-        setLanguageValue(langRaw === "afrikaans" ? "afrikaans" : "english");
+        if (languageEnabled) {
+          const langRaw = (lead.language ?? "english").toLowerCase();
+          setLanguageValue(langRaw === "afrikaans" ? "afrikaans" : "english");
+        }
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "Failed to load lead details";
         pushToast({ type: "error", title: "Lead details", message: msg });
       })
       .finally(() => setLoading(false));
-  }, [lead, open, pushToast]);
+  }, [languageEnabled, lead, open, pushToast]);
 
   async function toggleClient() {
     if (!lead) return;
@@ -218,6 +222,7 @@ export default function LeadDetailsDrawer({
 
   async function saveLanguage(next: LeadLanguage) {
     if (!lead) return;
+    if (!languageEnabled) return;
     setSavingLanguage(true);
     try {
       const r = await supabase.from("leads").update({ language: next }).eq("id", lead.id);
@@ -498,42 +503,44 @@ export default function LeadDetailsDrawer({
                       <span className="text-zinc-400">Stage</span>
                       <span className="font-semibold text-zinc-100">{formatStageLabel(lead.stage)}</span>
                     </div>
-                    <div className="grid gap-1 rounded-xl border border-border bg-panel px-3 py-2">
-                      <div className="text-xs text-zinc-400">Language</div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLanguageValue("english");
-                            void saveLanguage("english");
-                          }}
-                          className={cn(
-                            "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
-                            languageValue === "english"
-                              ? "border-purple/30 bg-purple/15 text-purple"
-                              : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
-                          )}
-                        >
-                          English
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLanguageValue("afrikaans");
-                            void saveLanguage("afrikaans");
-                          }}
-                          className={cn(
-                            "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
-                            languageValue === "afrikaans"
-                              ? "border-purple/30 bg-purple/15 text-purple"
-                              : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
-                          )}
-                        >
-                          Afrikaans
-                        </button>
+                    {languageEnabled ? (
+                      <div className="grid gap-1 rounded-xl border border-border bg-panel px-3 py-2">
+                        <div className="text-xs text-zinc-400">Language</div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLanguageValue("english");
+                              void saveLanguage("english");
+                            }}
+                            className={cn(
+                              "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                              languageValue === "english"
+                                ? "border-purple/30 bg-purple/15 text-purple"
+                                : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                            )}
+                          >
+                            English
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLanguageValue("afrikaans");
+                              void saveLanguage("afrikaans");
+                            }}
+                            className={cn(
+                              "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold",
+                              languageValue === "afrikaans"
+                                ? "border-purple/30 bg-purple/15 text-purple"
+                                : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+                            )}
+                          >
+                            Afrikaans
+                          </button>
+                        </div>
+                        {savingLanguage ? <div className="text-xs text-zinc-400">Saving…</div> : null}
                       </div>
-                      {savingLanguage ? <div className="text-xs text-zinc-400">Saving…</div> : null}
-                    </div>
+                    ) : null}
                     <div className="grid gap-1 rounded-xl border border-border bg-panel px-3 py-2">
                       <div className="text-xs text-zinc-400">Niche</div>
                       <div className="flex items-center gap-2">
