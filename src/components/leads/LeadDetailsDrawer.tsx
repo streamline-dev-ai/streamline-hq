@@ -94,6 +94,8 @@ export default function LeadDetailsDrawer({
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [nicheValue, setNicheValue] = useState<NicheOption>("electrical");
   const [savingNiche, setSavingNiche] = useState(false);
+  const [notesValue, setNotesValue] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const leadContext: LeadContext | null = useMemo(() => {
     if (!lead) return null;
@@ -131,6 +133,7 @@ export default function LeadDetailsDrawer({
         setFollowUpDate(lead.follow_up_due ?? "");
         const raw = (lead.niche ?? "electrical").toLowerCase();
         setNicheValue((NICHES as unknown as string[]).includes(raw) ? (raw as NicheOption) : "other");
+        setNotesValue((lead.notes ?? "").trim());
         if (languageEnabled) {
           const langRaw = (lead.language ?? "english").toLowerCase();
           setLanguageValue(langRaw === "afrikaans" ? "afrikaans" : "english");
@@ -233,6 +236,23 @@ export default function LeadDetailsDrawer({
       pushToast({ type: "error", title: "Language", message: msg });
     } finally {
       setSavingLanguage(false);
+    }
+  }
+
+  async function saveNotes(next: string) {
+    if (!lead) return;
+    setSavingNotes(true);
+    try {
+      const cleaned = next.trim();
+      const r = await supabase.from("leads").update({ notes: cleaned || null }).eq("id", lead.id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Notes", message: "Saved" });
+      setNotesValue(cleaned);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to save notes";
+      pushToast({ type: "error", title: "Notes", message: msg });
+    } finally {
+      setSavingNotes(false);
     }
   }
 
@@ -573,7 +593,25 @@ export default function LeadDetailsDrawer({
 
                 <div className="rounded-2xl border border-border bg-base/40 p-3">
                   <div className="text-xs text-zinc-400">Notes</div>
-                  <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{lead.notes?.trim() ? lead.notes : "No notes"}</div>
+                  <textarea
+                    value={notesValue}
+                    onChange={(e) => setNotesValue(e.target.value)}
+                    className="mt-2 min-h-[120px] w-full rounded-xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                    placeholder="Add notes like: wrong number, not owner, number doesn’t exist, etc."
+                  />
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={savingNotes}
+                      onClick={() => void saveNotes(notesValue)}
+                      className={cn(
+                        "rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110",
+                        savingNotes && "opacity-60",
+                      )}
+                    >
+                      Save notes
+                    </button>
+                  </div>
                 </div>
               </div>
 
