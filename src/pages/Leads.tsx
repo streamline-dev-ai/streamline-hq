@@ -18,9 +18,9 @@ import {
 
 type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost";
 
-type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "other";
+type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "other";
 
-const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "other"];
+const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "other"];
 
 type LeadLanguage = "english" | "afrikaans";
 

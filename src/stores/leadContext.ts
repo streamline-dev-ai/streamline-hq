@@ -5,6 +5,8 @@ export type LeadContext = {
   business_name: string;
   owner_name: string | null;
   demo_url: string | null;
+  niche: string | null;
+  stage: string | null;
 };
 
 type LeadContextState = {

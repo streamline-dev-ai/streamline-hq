@@ -108,7 +108,26 @@ export default function Messages() {
 
   const grouped = useMemo(() => {
     const map = new Map<string, TemplateRow[]>();
-    for (const t of templates) {
+    
+    let filteredTemplates = templates;
+    if (activeLead) {
+      const isRestaurant = (activeLead.niche ?? "").toLowerCase() === "restaurant";
+      filteredTemplates = templates.filter((t) => {
+        const isRestaurantTemplate = t.name.toLowerCase().startsWith("restaurant");
+        if (isRestaurant) {
+          return isRestaurantTemplate;
+        } else {
+          return !isRestaurantTemplate;
+        }
+      });
+
+      if (activeLead.stage) {
+        const leadGroupKey = groupKey(activeLead.stage);
+        filteredTemplates = filteredTemplates.filter((t) => groupKey(t.stage) === leadGroupKey);
+      }
+    }
+
+    for (const t of filteredTemplates) {
       const key = groupKey(t.stage);
       map.set(key, [...(map.get(key) ?? []), t]);
     }
@@ -119,7 +138,7 @@ export default function Messages() {
       );
     }
     return map;
-  }, [templates]);
+  }, [templates, activeLead]);
 
   const loadTemplates = useCallback(async () => {
     setLoading(true);

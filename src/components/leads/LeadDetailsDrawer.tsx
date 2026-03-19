@@ -57,9 +57,9 @@ function followUpLabel(t: string | null) {
 
 type DrawerTab = "details" | "messages";
 
-type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "other";
+type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "other";
 
-const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "other"];
+const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "other"];
 
 type LeadLanguage = "english" | "afrikaans";
 
@@ -104,6 +104,8 @@ export default function LeadDetailsDrawer({
       business_name: lead.business_name,
       owner_name: lead.owner_name,
       demo_url: lead.demo_url,
+      niche: lead.niche,
+      stage: lead.stage,
     };
   }, [lead]);
 
