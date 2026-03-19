@@ -138,6 +138,24 @@ export function getOutreachMessage(lead: OutreachLead) {
     return applyVars(templates.follow_up_both, { ...vars, owner_name: who }).trim();
   }
 
+  if (niche === "restaurant") {
+    if (stage === "new") {
+      return applyVars("Hi, is this the owner of {business_name}?", vars).trim();
+    }
+    if (stage === "messaged") {
+      return applyVars(
+        "Hey! I actually ate at {business_name} recently — food was great. Wanted to share it with a friend afterwards and realised you guys don't have a website. Is there a reason for that?",
+        vars
+      ).trim();
+    }
+    if (stage === "replied") {
+      return applyVars(
+        "Ah makes sense. I actually build websites — I put together a quick demo to show you what it could look like. Online menu, reservations, the works. Would you be interested in having a look?",
+        vars
+      ).trim();
+    }
+  }
+
   if (stage === "new") {
     const tpl =
       language === "afrikaans"
