@@ -8,6 +8,11 @@ import {
   Megaphone,
   Settings as SettingsIcon,
   Radio,
+  Calendar,
+  PlusCircle,
+  Lightbulb,
+  BarChart3,
+  ChevronDown
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { cn } from "@/lib/utils";
@@ -17,6 +22,7 @@ type NavItem = {
   to: string;
   label: string;
   Icon: ComponentType<{ className?: string }>;
+  subItems?: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[];
 };
 
 const NAV: NavItem[] = [
@@ -25,7 +31,17 @@ const NAV: NavItem[] = [
   { to: "/messages", label: "Messages", Icon: MessageSquareText },
   { to: "/clients", label: "Clients", Icon: BriefcaseBusiness },
   { to: "/finance", label: "Finance", Icon: Wallet },
-  { to: "/content", label: "Content", Icon: Megaphone },
+  {
+    to: "/content",
+    label: "Content",
+    Icon: Megaphone,
+    subItems: [
+      { to: "/content?tab=calendar", label: "Calendar", Icon: Calendar },
+      { to: "/content?tab=create", label: "Create", Icon: PlusCircle },
+      { to: "/content?tab=ideas", label: "Ideas", Icon: Lightbulb },
+      { to: "/content?tab=analytics", label: "Analytics", Icon: BarChart3 },
+    ],
+  },
   { to: "/settings", label: "Settings", Icon: SettingsIcon },
 ];
 
@@ -72,22 +88,49 @@ export default function AppLayout() {
             </div>
           </div>
           <nav className="flex flex-1 flex-col gap-1 px-2 pb-4">
-            {NAV.map(({ to, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  cn(
-                    "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 transition",
-                    "hover:bg-white/5 hover:text-white",
-                    isActive && "bg-purple/15 text-purple hover:text-purple",
-                  )
-                }
-              >
-                <Icon className="h-5 w-5" />
-                <span className="hidden lg:block">{label}</span>
-              </NavLink>
-            ))}
+            {NAV.map(({ to, label, Icon, subItems }) => {
+              const isActive = location.pathname.startsWith(to);
+              return (
+                <div key={to} className="flex flex-col gap-1">
+                  <NavLink
+                    to={to}
+                    className={({ isActive: isExactActive }) =>
+                      cn(
+                        "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 transition",
+                        "hover:bg-white/5 hover:text-white",
+                        (isExactActive || isActive) && "bg-purple/15 text-purple hover:text-purple",
+                      )
+                    }
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="hidden lg:block flex-1">{label}</span>
+                    {subItems && isActive && (
+                      <ChevronDown className="hidden lg:block h-3.5 w-3.5 opacity-50" />
+                    )}
+                  </NavLink>
+                  {subItems && isActive && (
+                    <div className="hidden lg:flex flex-col gap-1 ml-9 pb-2">
+                      {subItems.map((sub) => (
+                        <NavLink
+                          key={sub.to}
+                          to={sub.to}
+                          className={({ isActive: isSubActive }) =>
+                            cn(
+                              "px-3 py-1.5 text-xs rounded-lg transition",
+                              isSubActive
+                                ? "text-purple bg-purple/5 font-medium"
+                                : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5",
+                            )
+                          }
+                        >
+                          {sub.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </nav>
           <div className="px-4 pb-4">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2">

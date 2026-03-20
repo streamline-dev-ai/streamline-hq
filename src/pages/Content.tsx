@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Calendar, PlusCircle, Lightbulb, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ContentCalendar from "@/components/content/ContentCalendar";
@@ -17,17 +18,31 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function Content() {
-  const [activeTab, setActiveTab] = useState<TabId>("calendar");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as TabId;
+  const [activeTab, setActiveTab] = useState<TabId>(tabParam || "calendar");
   const [selectedIdea, setSelectedIdea] = useState<Partial<ContentIdea> | null>(null);
+
+  useEffect(() => {
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (id: TabId) => {
+    setActiveTab(id);
+    setSearchParams({ tab: id });
+    if (id !== "create") setSelectedIdea(null);
+  };
 
   const handleUseIdea = (idea: Partial<ContentIdea>) => {
     setSelectedIdea(idea);
-    setActiveTab("create");
+    handleTabChange("create");
   };
 
   const handleNewPost = (date?: string) => {
     setSelectedIdea(date ? { scheduled_for: date } : null);
-    setActiveTab("create");
+    handleTabChange("create");
   };
 
   return (
@@ -37,10 +52,7 @@ export default function Content() {
           {TABS.map(({ id, label, Icon }) => (
             <button
               key={id}
-              onClick={() => {
-                setActiveTab(id);
-                if (id !== "create") setSelectedIdea(null);
-              }}
+              onClick={() => handleTabChange(id)}
               className={cn(
                 "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition",
                 activeTab === id
