@@ -1,8 +1,66 @@
+import { useState } from "react";
+import { Calendar, PlusCircle, Lightbulb, BarChart3 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import ContentCalendar from "@/components/content/ContentCalendar";
+import ContentCreate from "@/components/content/ContentCreate";
+import ContentIdeas from "@/components/content/ContentIdeas";
+import ContentAnalytics from "@/components/content/ContentAnalytics";
+import { ContentIdea } from "@/types/content";
+
+const TABS = [
+  { id: "calendar", label: "Calendar", Icon: Calendar },
+  { id: "create", label: "Create", Icon: PlusCircle },
+  { id: "ideas", label: "Ideas", Icon: Lightbulb },
+  { id: "analytics", label: "Analytics", Icon: BarChart3 },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
 export default function Content() {
+  const [activeTab, setActiveTab] = useState<TabId>("calendar");
+  const [selectedIdea, setSelectedIdea] = useState<Partial<ContentIdea> | null>(null);
+
+  const handleUseIdea = (idea: Partial<ContentIdea>) => {
+    setSelectedIdea(idea);
+    setActiveTab("create");
+  };
+
+  const handleNewPost = (date?: string) => {
+    setSelectedIdea(date ? { scheduled_for: date } : null);
+    setActiveTab("create");
+  };
+
   return (
-    <div className="rounded-2xl border border-border bg-panel p-4">
-      <div className="text-sm font-semibold">Content</div>
-      <div className="mt-1 text-sm text-zinc-400">Coming next.</div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1 rounded-xl bg-panel p-1 border border-border">
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => {
+                setActiveTab(id);
+                if (id !== "create") setSelectedIdea(null);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition",
+                activeTab === id
+                  ? "bg-purple text-white shadow-lg shadow-purple/20"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-white/5",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {activeTab === "calendar" && <ContentCalendar onNewPost={handleNewPost} />}
+        {activeTab === "create" && <ContentCreate initialData={selectedIdea} />}
+        {activeTab === "ideas" && <ContentIdeas onUseIdea={handleUseIdea} />}
+        {activeTab === "analytics" && <ContentAnalytics />}
+      </div>
     </div>
   );
 }
