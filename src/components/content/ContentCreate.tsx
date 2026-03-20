@@ -14,7 +14,8 @@ import {
   Calendar,
   Save,
   Send,
-  CheckCircle2
+  CheckCircle2,
+  PlusCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -151,7 +152,11 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
       }
 
       const data = await response.json();
-      const text = data.content[0].text;
+      const text = data.content?.[0]?.text;
+      
+      if (!text) {
+        throw new Error("AI returned an empty response");
+      }
       
       // Better JSON extraction
       let jsonStr = text;
@@ -160,7 +165,13 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
         jsonStr = jsonMatch[0];
       }
       
-      const result = JSON.parse(jsonStr);
+      let result;
+      try {
+        result = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("JSON parse failed. Original text:", text);
+        throw new Error("AI returned invalid data format. Please try again.");
+      }
 
       setCaptions({
         instagram: result.instagram || "",
