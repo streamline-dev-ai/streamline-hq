@@ -1,10 +1,11 @@
 import { Platform } from "@/types/content";
 
-// Buffer API configuration
-const BUFFER_API = "https://api.buffer.com";
-const BUFFER_KEY = import.meta.env.VITE_BUFFER_API_KEY;
+// Supabase Edge Function URL for Buffer proxy
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const BUFFER_PROXY_URL = `${SUPABASE_URL}/functions/v1/buffer-proxy`;
 
-// Channel IDs from environment
+// Channel IDs from environment (these should be set in Supabase secrets)
 const CHANNEL_IDS: Record<Platform, string | undefined> = {
   instagram: import.meta.env.VITE_BUFFER_INSTAGRAM_ID,
   facebook: import.meta.env.VITE_BUFFER_FACEBOOK_ID,
@@ -13,7 +14,7 @@ const CHANNEL_IDS: Record<Platform, string | undefined> = {
 
 // Check if Buffer is configured
 export function isBufferConfigured(): boolean {
-  return !!BUFFER_KEY;
+  return !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
 }
 
 // Get channel ID for a platform
@@ -42,22 +43,22 @@ async function createPost(channelId: string, caption: string, dueAt: string): Pr
   `;
 
   try {
-    const res = await fetch(BUFFER_API, {
+    const res = await fetch(BUFFER_PROXY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${BUFFER_KEY}`,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({ query }),
     });
 
     const data = await res.json();
     
-    if (data.errors) {
-      return { success: false, error: data.errors[0]?.message || "GraphQL error" };
+    if (data.error) {
+      return { success: false, error: data.error };
     }
 
-    const postData = data.data?.createPost;
+    const postData = data?.data?.createPost;
     if (postData?.__typename === "PostActionSuccess" && postData?.post?.id) {
       return { success: true, postId: postData.post.id };
     } else if (postData?.__typename === "MutationError") {
