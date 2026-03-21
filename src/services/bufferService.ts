@@ -1,0 +1,145 @@
+import { Platform } from "@/types/content";
+
+// Buffer API configuration
+const BUFFER_API = "https://api.buffer.com";
+const BUFFER_KEY = import.meta.env.VITE_BUFFER_API_KEY;
+
+// Channel IDs from environment
+const CHANNEL_IDS: Record<Platform, string | undefined> = {
+  instagram: import.meta.env.VITE_BUFFER_INSTAGRAM_ID,
+  facebook: import.meta.env.VITE_BUFFER_FACEBOOK_ID,
+  linkedin: import.meta.env.VITE_BUFFER_LINKEDIN_ID,
+};
+
+// Check if Buffer is configured
+export function isBufferConfigured(): boolean {
+  return !!BUFFER_KEY;
+}
+
+// Get channel ID for a platform
+export function getChannelId(platform: Platform): string | undefined {
+  return CHANNEL_IDS[platform];
+}
+
+async function createPost(channelId: string, caption: string, dueAt: string): Promise<{
+  success: boolean;
+  postId?: string;
+  error?: string;
+}> {
+  const query = `
+    mutation CreatePost {
+      createPost(input: {
+        text: ${JSON.stringify(caption)}
+        channelId: "${channelId}"
+        schedulingType: automatic
+        mode: customSchedule
+        dueAt: "${dueAt}"
+      }) {
+        ... on PostActionSuccess { post { id text } }
+        ... on MutationError { message }
+      }
+    }
+  `;
+
+  try {
+    const res = await fetch(BUFFER_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${BUFFER_KEY}`,
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    const data = await res.json();
+    
+    if (data.errors) {
+      return { success: false, error: data.errors[0]?.message || "GraphQL error" };
+    }
+
+    const postData = data.data?.createPost;
+    if (postData?.__typename === "PostActionSuccess" && postData?.post?.id) {
+      return { success: true, postId: postData.post.id };
+    } else if (postData?.__typename === "MutationError") {
+      return { success: false, error: postData.message };
+    }
+
+    return { success: false, error: "Unknown response from Buffer" };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Failed to create post" };
+  }
+}
+
+export async function scheduleToAllPlatforms(
+  platforms: Platform[],
+  captions: { instagram?: string; facebook?: string; linkedin?: string },
+  dueAt: string
+): Promise<{
+  success: { platform: Platform; bufferId: string }[];
+  failed: { platform: Platform; error: string }[];
+}> {
+  const results = await Promise.allSettled(
+    platforms.map((platform) =>
+      createPost(
+        CHANNEL_IDS[platform]!,
+        captions[platform] || "",
+        new Date(dueAt).toISOString()
+      )
+    )
+  );
+
+  const success: { platform: Platform; bufferId: string }[] = [];
+  const failed: { platform: Platform; error: string }[] = [];
+
+  results.forEach((result, i) => {
+    const platform = platforms[i];
+    if (
+      result.status === "fulfilled" &&
+      result.value.success &&
+      result.value.postId
+    ) {
+      success.push({
+        platform,
+        bufferId: result.value.postId,
+      });
+    } else {
+      const errorMsg =
+        result.status === "rejected"
+          ? result.reason
+          : result.value.error || "Unknown error";
+      failed.push({
+        platform,
+        error: errorMsg,
+      });
+    }
+  });
+
+  return { success, failed };
+}
+
+export async function postNow(
+  platforms: Platform[],
+  captions: { instagram?: string; facebook?: string; linkedin?: string }
+): Promise<{
+  success: { platform: Platform; bufferId: string }[];
+  failed: { platform: Platform; error: string }[];
+}> {
+  const dueAt = new Date(Date.now() + 120000); // 2 min from now
+  return scheduleToAllPlatforms(platforms, captions, dueAt.toISOString());
+}
+
+// Validate that all platforms have channel IDs configured
+export function validatePlatforms(platforms: Platform[]): { valid: Platform[]; invalid: Platform[] } {
+  const valid: Platform[] = [];
+  const invalid: Platform[] = [];
+
+  platforms.forEach((platform) => {
+    if (CHANNEL_IDS[platform]) {
+      valid.push(platform);
+    } else {
+      invalid.push(platform);
+    }
+  });
+
+  return { valid, invalid };
+}

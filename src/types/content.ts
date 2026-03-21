@@ -37,6 +37,11 @@ export interface ContentPost {
   reach: number | null;
   engagement: number | null;
   created_at: string;
+  buffer_post_ids: {
+    instagram?: string;
+    facebook?: string;
+    linkedin?: string;
+  } | null;
 }
 
 export interface ContentIdea {

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { 
   Sparkles, 
   Layers, 
@@ -11,16 +11,18 @@ import {
   Upload, 
   X, 
   Loader2, 
-  Calendar,
   Save,
   Send,
   CheckCircle2,
-  PlusCircle
+  PlusCircle,
+  AlertTriangle,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { ContentType, ContentPillar, Platform, ContentIdea } from "@/types/content";
-import Badge from "@/components/Badge";
+import { isBufferConfigured, scheduleToAllPlatforms, postNow } from "@/services/bufferService";
+import { generateCaptions as generateCaptionsFromAI } from "@/services/captionService";
 
 const PILLARS: ContentPillar[] = [
   "Build in Public",
@@ -83,95 +85,24 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [activePreview, setActivePreview] = useState<Platform>("instagram");
   const [uploading, setUploading] = useState(false);
+  const [captionsGenerated, setCaptionsGenerated] = useState(false);
+  const [regeneratingPlatform, setRegeneratingPlatform] = useState<Platform | null>(null);
+  
+  // Buffer scheduling state
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null);
+  
+  // Buffer warning if not configured
+  const bufferConfigured = isBufferConfigured();
 
-  const generateCaptions = async () => {
-    if (!brief) return;
+  const handleGenerateCaptions = async () => {
+    if (!brief || platforms.length === 0) return;
     setIsGenerating(true);
-
-    const systemPrompt = `
-      You are a social media copywriter for Streamline Automations,
-      a South African web design and automation agency. 
-      
-      Brand voice: Direct, confident, no fluff. Short punchy sentences.
-      No hashtags in captions (go in first comment separately).
-      Orange and purple are the brand colors. Dark tech aesthetic.
-      
-      Target audience: SA small business owners who need a website 
-      or automation system. Speak their language — practical, 
-      outcome-focused, no jargon.
-      
-      Generate platform-specific captions for the following post brief.
-      Return ONLY a JSON object with these keys:
-      {
-        "instagram": "caption here",
-        "facebook": "caption here", 
-        "linkedin": "caption here",
-        "hashtags": "#hashtag1 #hashtag2 #hashtag3",
-        "first_comment": "CTA for first comment e.g. Link in bio"
-      }
-      
-      Instagram: punchy, visual, 3-5 short lines, emoji sparingly
-      Facebook: slightly longer, more context, conversational
-      LinkedIn: first-person founder voice, professional, insight-led
-    `;
-
-    const userMessage = `
-      Post brief: ${brief}
-      Content type: ${contentType}
-      Pillar: ${pillar}
-      Platforms: ${platforms.join(", ")}
-    `;
+    setCaptionsGenerated(false);
 
     try {
-      const apiKey = import.meta.env.VITE_CLAUDE_API_KEY;
-      if (!apiKey) {
-        alert("Claude API key missing. Please add VITE_CLAUDE_API_KEY to your .env file.");
-        setIsGenerating(false);
-        return;
-      }
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "dangerously-allow-browser": "true"
-        },
-        body: JSON.stringify({
-          model: "claude-3-sonnet-20240229",
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: [{ role: "user", content: userMessage }]
-        })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || "Failed to generate captions");
-      }
-
-      const data = await response.json();
-      const text = data.content?.[0]?.text;
-      
-      if (!text) {
-        throw new Error("AI returned an empty response");
-      }
-      
-      // Better JSON extraction
-      let jsonStr = text;
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[0];
-      }
-      
-      let result;
-      try {
-        result = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error("JSON parse failed. Original text:", text);
-        throw new Error("AI returned invalid data format. Please try again.");
-      }
+      const result = await generateCaptionsFromAI(brief, contentType, pillar, platforms);
 
       setCaptions({
         instagram: result.instagram || "",
@@ -180,11 +111,33 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
       });
       setHashtags(result.hashtags || "");
       setFirstComment(result.first_comment || "");
-    } catch (error: any) {
+      setCaptionsGenerated(true);
+    } catch (error: unknown) {
       console.error("Generation failed:", error);
-      alert(`Generation failed: ${error.message}`);
+      const message = error instanceof Error ? error.message : "Generation failed";
+      alert(`Generation failed: ${message}`);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Regenerate caption for a single platform
+  const handleRegenerateCaption = async (platform: Platform) => {
+    if (!brief) return;
+    setRegeneratingPlatform(platform);
+
+    try {
+      const result = await generateCaptionsFromAI(brief, contentType, pillar, [platform]);
+      setCaptions((prev) => ({
+        ...prev,
+        [platform]: result[platform] || "",
+      }));
+    } catch (error: unknown) {
+      console.error("Regeneration failed:", error);
+      const message = error instanceof Error ? error.message : "Regeneration failed";
+      alert(`Regeneration failed: ${message}`);
+    } finally {
+      setRegeneratingPlatform(null);
     }
   };
 
@@ -213,12 +166,204 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
 
       if (error) throw error;
       alert(`Post saved as ${status} successfully!`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Save failed:", error);
-      alert(`Save failed: ${error.message}`);
+      const message = error instanceof Error ? error.message : "Save failed";
+      alert(`Save failed: ${message}`);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Validate before scheduling
+  const validateScheduling = (): string | null => {
+    if (!bufferConfigured) {
+      return "Buffer not configured — add VITE_BUFFER_API_KEY to .env";
+    }
+    if (platforms.length === 0) {
+      return "Please select at least one platform";
+    }
+    if (!scheduledFor) {
+      return "Please set a schedule date and time";
+    }
+    // Check if captions are generated for selected platforms
+    for (const platform of platforms) {
+      if (!captions[platform]) {
+        return `Please generate captions first (missing for ${platform})`;
+      }
+    }
+    return null;
+  };
+
+  // Schedule post via Buffer
+  const handleSchedule = async () => {
+    const validationError = validateScheduling();
+    if (validationError) {
+      setScheduleError(validationError);
+      setScheduleSuccess(null);
+      return;
+    }
+
+    setIsScheduling(true);
+    setScheduleError(null);
+    setScheduleSuccess(null);
+
+    try {
+      // First save the post to Supabase
+      const { data: postData, error: insertError } = await supabase
+        .from("content_posts")
+        .insert({
+          title,
+          content_type: contentType,
+          content_pillar: pillar,
+          platforms,
+          brief,
+          captions,
+          hashtags,
+          first_comment: firstComment,
+          media_urls: mediaUrls,
+          scheduled_for: scheduledFor,
+          notes,
+          status: "scheduled",
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Schedule to Buffer
+      const result = await scheduleToAllPlatforms(
+        platforms,
+        captions as { instagram?: string; facebook?: string; linkedin?: string },
+        scheduledFor
+      );
+
+      // Build buffer_post_ids object
+      const bufferPostIds: Record<string, string> = {};
+      result.success.forEach((s) => {
+        bufferPostIds[s.platform] = s.bufferId;
+      });
+
+      // Update with Buffer post IDs
+      await supabase
+        .from("content_posts")
+        .update({
+          status: "scheduled",
+          scheduled_for: scheduledFor,
+          buffer_post_ids: bufferPostIds,
+        })
+        .eq("id", postData.id);
+
+      if (result.failed.length === 0) {
+        // All succeeded
+        setScheduleSuccess(`Scheduled to ${platforms.join(", ")}`);
+        clearForm();
+      } else if (result.success.length > 0) {
+        // Partial success
+        const succeededPlatforms = result.success.map((s) => s.platform).join(", ");
+        const failedPlatforms = result.failed.map((f) => f.platform).join(", ");
+        setScheduleSuccess(`Scheduled to: ${succeededPlatforms}`);
+        setScheduleError(`Failed for: ${failedPlatforms}`);
+      } else {
+        // Total failure
+        setScheduleError(result.failed[0]?.error || "Failed to schedule to Buffer");
+      }
+    } catch (error: unknown) {
+      console.error("Scheduling failed:", error);
+      const message = error instanceof Error ? error.message : "Failed to schedule post";
+      setScheduleError(message);
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  // Post Now via Buffer
+  const handlePostNow = async () => {
+    const validationError = validateScheduling();
+    if (validationError) {
+      setScheduleError(validationError);
+      setScheduleSuccess(null);
+      return;
+    }
+
+    setIsScheduling(true);
+    setScheduleError(null);
+    setScheduleSuccess(null);
+
+    try {
+      // First save the post to Supabase
+      const { data: postData, error: insertError } = await supabase
+        .from("content_posts")
+        .insert({
+          title,
+          content_type: contentType,
+          content_pillar: pillar,
+          platforms,
+          brief,
+          captions,
+          hashtags,
+          first_comment: firstComment,
+          media_urls: mediaUrls,
+          scheduled_for: new Date().toISOString(),
+          notes,
+          status: "scheduled",
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Schedule to Buffer immediately
+      const result = await postNow(
+        platforms,
+        captions as { instagram?: string; facebook?: string; linkedin?: string }
+      );
+
+      // Build buffer_post_ids object
+      const bufferPostIds: Record<string, string> = {};
+      result.success.forEach((s) => {
+        bufferPostIds[s.platform] = s.bufferId;
+      });
+
+      // Update with Buffer post IDs
+      await supabase
+        .from("content_posts")
+        .update({
+          status: "scheduled",
+          buffer_post_ids: bufferPostIds,
+        })
+        .eq("id", postData.id);
+
+      if (result.failed.length === 0) {
+        setScheduleSuccess(`Posted to ${platforms.join(", ")} (will go live in ~2 mins)`);
+        clearForm();
+      } else if (result.success.length > 0) {
+        const succeededPlatforms = result.success.map((s) => s.platform).join(", ");
+        const failedPlatforms = result.failed.map((f) => f.platform).join(", ");
+        setScheduleSuccess(`Posted to: ${succeededPlatforms}`);
+        setScheduleError(`Failed for: ${failedPlatforms}`);
+      } else {
+        setScheduleError(result.failed[0]?.error || "Failed to post to Buffer");
+      }
+    } catch (error: unknown) {
+      console.error("Post now failed:", error);
+      const message = error instanceof Error ? error.message : "Failed to post now";
+      setScheduleError(message);
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  // Clear the form
+  const clearForm = () => {
+    setTitle("");
+    setBrief("");
+    setCaptions({});
+    setHashtags("");
+    setFirstComment("");
+    setMediaUrls([]);
+    setScheduledFor("");
+    setNotes("");
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -363,7 +508,7 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
 
             {/* Generate Button */}
             <button
-              onClick={generateCaptions}
+              onClick={handleGenerateCaptions}
               disabled={isGenerating || !brief}
               className="w-full flex items-center justify-center gap-2 py-3 bg-purple text-white rounded-xl text-sm font-bold hover:bg-purple/90 transition shadow-lg shadow-purple/20 disabled:opacity-50"
             >
@@ -424,36 +569,84 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
               </div>
             </div>
 
+            {/* Buffer Warning */}
+            {!bufferConfigured && (
+              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Buffer not configured — add VITE_BUFFER_API_KEY to .env</span>
+              </div>
+            )}
+
+            {/* Success/Error Messages */}
+            {scheduleSuccess && (
+              <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{scheduleSuccess}</span>
+              </div>
+            )}
+            {scheduleError && (
+              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{scheduleError}</span>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3 pt-4">
               <button
                 onClick={() => savePost("idea")}
-                disabled={isSaving}
-                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-white/5 text-zinc-400 rounded-xl text-sm font-semibold hover:bg-white/10 hover:text-white transition"
+                disabled={isSaving || isScheduling}
+                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-white/5 text-zinc-400 rounded-xl text-sm font-semibold hover:bg-white/10 hover:text-white transition disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
                 Save as Idea
               </button>
               <button
                 onClick={() => savePost("ready")}
-                disabled={isSaving}
-                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-blue-500/10 text-blue-400 rounded-xl text-sm font-semibold hover:bg-blue-500/20 transition"
+                disabled={isSaving || isScheduling}
+                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-blue-500/10 text-blue-400 rounded-xl text-sm font-semibold hover:bg-blue-500/20 transition disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Save as Ready
               </button>
               <button
-                onClick={() => savePost("scheduled")}
-                disabled={isSaving || !scheduledFor}
+                onClick={handleSchedule}
+                disabled={isScheduling || !bufferConfigured}
                 className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-purple text-white rounded-xl text-sm font-semibold hover:bg-purple/90 transition shadow-lg shadow-purple/20 disabled:opacity-50"
               >
-                <Send className="h-4 w-4" />
-                Schedule
+                {isScheduling ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Scheduling...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Schedule
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handlePostNow}
+                disabled={isScheduling || !bufferConfigured}
+                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-orange text-white rounded-xl text-sm font-semibold hover:bg-orange/90 transition shadow-lg shadow-orange/20 disabled:opacity-50"
+              >
+                {isScheduling ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Posting...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4" />
+                    Post Now
+                  </>
+                )}
               </button>
               <button
                 onClick={() => savePost("posted")}
-                disabled={isSaving}
-                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl text-sm font-semibold hover:bg-emerald-500/20 transition"
+                disabled={isSaving || isScheduling}
+                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl text-sm font-semibold hover:bg-emerald-500/20 transition disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Mark Posted

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { ContentPost, ContentStatus } from "@/types/content";
@@ -69,6 +69,11 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
 
   const getPostsForDay = (dateYmd: string) => {
     return filteredPosts.filter((p) => p.scheduled_for?.startsWith(dateYmd));
+  };
+
+  // Check if a post has Buffer IDs (meaning it's queued in Buffer)
+  const hasBufferIds = (post: ContentPost) => {
+    return post.buffer_post_ids && Object.keys(post.buffer_post_ids).length > 0;
   };
 
   return (
@@ -188,20 +193,31 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
                       </div>
                     </div>
                     <div className="truncate text-xs font-medium text-zinc-200">{post.title}</div>
-                    <Badge
-                      variant={
-                        post.status === "posted"
-                          ? "emerald"
-                          : post.status === "scheduled"
-                          ? "purple"
-                          : post.status === "ready"
-                          ? "blue"
-                          : "zinc"
-                      }
-                      className="w-fit"
-                    >
-                      {post.status}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          post.status === "posted"
+                            ? "emerald"
+                            : post.status === "scheduled"
+                            ? "purple"
+                            : post.status === "ready"
+                            ? "blue"
+                            : "zinc"
+                        }
+                        className="w-fit"
+                      >
+                        {post.status}
+                      </Badge>
+                      {post.status === "scheduled" && hasBufferIds(post) && (
+                        <div 
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#168eea]/20 text-[#168eea] text-[10px] font-medium"
+                          title="Scheduled via Buffer"
+                        >
+                          <Send className="h-2.5 w-2.5" />
+                          Buffer
+                        </div>
+                      )}
+                    </div>
                   </button>
                 ))}
                 <button
@@ -253,7 +269,7 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
                     })}
                   </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex items-center gap-1">
                   {post.platforms.map((p) => (
                     <Badge
                       key={p}
@@ -263,6 +279,14 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
                       {p === "instagram" ? "IG" : p === "facebook" ? "FB" : "LI"}
                     </Badge>
                   ))}
+                  {post.status === "scheduled" && hasBufferIds(post) && (
+                    <div 
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#168eea]/20 text-[#168eea] text-[9px] font-medium"
+                      title="Scheduled via Buffer"
+                    >
+                      <Send className="h-2 w-2" />
+                    </div>
+                  )}
                 </div>
               </div>
             ))
