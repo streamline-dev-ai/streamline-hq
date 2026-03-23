@@ -27,10 +27,12 @@ async function createPost(channelId: string, caption: string, dueAt: string, med
   postId?: string;
   error?: string;
 }> {
-  // Build media updates array for Buffer
-  const mediaUpdates = mediaUrls?.map((url) => ({
-    link: url,
-  })) || [];
+  // Build media updates array for Buffer - GraphQL expects {link: "url"} not {"link": "url"}
+  let mediaField = '';
+  if (mediaUrls && mediaUrls.length > 0) {
+    const mediaArray = mediaUrls.map((url) => `{link: "${url.replace(/"/g, '\\"')}"}`).join(', ');
+    mediaField = `media: [${mediaArray}]`;
+  }
 
   const query = `
     mutation CreatePost {
@@ -40,7 +42,7 @@ async function createPost(channelId: string, caption: string, dueAt: string, med
         schedulingType: automatic
         mode: customScheduled
         dueAt: "${dueAt}"
-        ${mediaUpdates.length > 0 ? `media: ${JSON.stringify(mediaUpdates)}` : ''}
+        ${mediaField}
       }) {
         ... on PostActionSuccess { post { id text } }
         ... on MutationError { message }
