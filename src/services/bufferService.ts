@@ -22,17 +22,14 @@ export function getChannelId(platform: Platform): string | undefined {
   return CHANNEL_IDS[platform];
 }
 
-async function createPost(channelId: string, caption: string, dueAt: string, mediaUrls?: string[]): Promise<{
+async function createPost(channelId: string, caption: string, dueAt: string, _mediaUrls?: string[]): Promise<{
   success: boolean;
   postId?: string;
   error?: string;
 }> {
-  // Build media updates array for Buffer - GraphQL expects {link: "url"} not {"link": "url"}
-  let mediaField = '';
-  if (mediaUrls && mediaUrls.length > 0) {
-    const mediaArray = mediaUrls.map((url) => `{link: "${url.replace(/"/g, '\\"')}"}`).join(', ');
-    mediaField = `media: [${mediaArray}]`;
-  }
+  // Note: Buffer's GraphQL API doesn't support direct media uploads via createPost.
+  // Media would need to be uploaded separately or added via Buffer's web interface.
+  // For now, we schedule text-only posts.
 
   const query = `
     mutation CreatePost {
@@ -42,7 +39,6 @@ async function createPost(channelId: string, caption: string, dueAt: string, med
         schedulingType: automatic
         mode: customScheduled
         dueAt: "${dueAt}"
-        ${mediaField}
       }) {
         ... on PostActionSuccess { post { id text } }
         ... on MutationError { message }
