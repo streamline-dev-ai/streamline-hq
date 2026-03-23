@@ -235,7 +235,8 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
       const result = await scheduleToAllPlatforms(
         platforms,
         captions as { instagram?: string; facebook?: string; linkedin?: string },
-        scheduledFor
+        scheduledFor,
+        mediaUrls
       );
 
       // Build buffer_post_ids object
@@ -316,7 +317,8 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
       // Schedule to Buffer immediately
       const result = await postNow(
         platforms,
-        captions as { instagram?: string; facebook?: string; linkedin?: string }
+        captions as { instagram?: string; facebook?: string; linkedin?: string },
+        mediaUrls
       );
 
       // Build buffer_post_ids object

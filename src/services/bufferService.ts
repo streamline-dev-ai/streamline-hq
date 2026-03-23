@@ -22,11 +22,16 @@ export function getChannelId(platform: Platform): string | undefined {
   return CHANNEL_IDS[platform];
 }
 
-async function createPost(channelId: string, caption: string, dueAt: string): Promise<{
+async function createPost(channelId: string, caption: string, dueAt: string, mediaUrls?: string[]): Promise<{
   success: boolean;
   postId?: string;
   error?: string;
 }> {
+  // Build media updates array for Buffer
+  const mediaUpdates = mediaUrls?.map((url) => ({
+    link: url,
+  })) || [];
+
   const query = `
     mutation CreatePost {
       createPost(input: {
@@ -35,6 +40,7 @@ async function createPost(channelId: string, caption: string, dueAt: string): Pr
         schedulingType: automatic
         mode: customScheduled
         dueAt: "${dueAt}"
+        ${mediaUpdates.length > 0 ? `media: ${JSON.stringify(mediaUpdates)}` : ''}
       }) {
         ... on PostActionSuccess { post { id text } }
         ... on MutationError { message }
@@ -86,7 +92,8 @@ async function createPost(channelId: string, caption: string, dueAt: string): Pr
 export async function scheduleToAllPlatforms(
   platforms: Platform[],
   captions: { instagram?: string; facebook?: string; linkedin?: string },
-  dueAt: string
+  dueAt: string,
+  mediaUrls?: string[]
 ): Promise<{
   success: { platform: Platform; bufferId: string }[];
   failed: { platform: Platform; error: string }[];
@@ -96,7 +103,8 @@ export async function scheduleToAllPlatforms(
       createPost(
         CHANNEL_IDS[platform]!,
         captions[platform] || "",
-        new Date(dueAt).toISOString()
+        new Date(dueAt).toISOString(),
+        mediaUrls
       )
     )
   );
@@ -132,13 +140,14 @@ export async function scheduleToAllPlatforms(
 
 export async function postNow(
   platforms: Platform[],
-  captions: { instagram?: string; facebook?: string; linkedin?: string }
+  captions: { instagram?: string; facebook?: string; linkedin?: string },
+  mediaUrls?: string[]
 ): Promise<{
   success: { platform: Platform; bufferId: string }[];
   failed: { platform: Platform; error: string }[];
 }> {
   const dueAt = new Date(Date.now() + 120000); // 2 min from now
-  return scheduleToAllPlatforms(platforms, captions, dueAt.toISOString());
+  return scheduleToAllPlatforms(platforms, captions, dueAt.toISOString(), mediaUrls);
 }
 
 // Validate that all platforms have channel IDs configured
