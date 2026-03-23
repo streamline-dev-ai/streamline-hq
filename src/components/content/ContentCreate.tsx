@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { ContentType, ContentPillar, Platform, ContentIdea } from "@/types/content";
+import { ContentType, ContentPillar, Platform, ContentIdea, ContentPost } from "@/types/content";
 import { isBufferConfigured, scheduleToAllPlatforms, postNow } from "@/services/bufferService";
 import { generateCaptions as generateCaptionsFromAI } from "@/services/captionService";
 
@@ -49,9 +49,10 @@ const PLATFORMS: { id: Platform; label: string; Icon: any; color: string }[] = [
 
 interface ContentCreateProps {
   initialData?: Partial<ContentIdea> | null;
+  editingPost?: Partial<ContentPost> | null;
 }
 
-export default function ContentCreate({ initialData }: ContentCreateProps) {
+export default function ContentCreate({ initialData, editingPost }: ContentCreateProps) {
   // Form State
   const [title, setTitle] = useState(initialData?.title || "");
   const [contentType, setContentType] = useState<ContentType>(initialData?.content_type || "static");
@@ -79,6 +80,25 @@ export default function ContentCreate({ initialData }: ContentCreateProps) {
       }
     }
   }, [initialData]);
+
+  useEffect(() => {
+    if (editingPost) {
+      if (editingPost.title) setTitle(editingPost.title);
+      if (editingPost.content_type) setContentType(editingPost.content_type);
+      if (editingPost.content_pillar) setPillar(editingPost.content_pillar);
+      if (editingPost.platforms) setPlatforms(editingPost.platforms);
+      if (editingPost.brief) setBrief(editingPost.brief);
+      if (editingPost.captions) setCaptions(editingPost.captions);
+      if (editingPost.hashtags) setHashtags(editingPost.hashtags);
+      if (editingPost.first_comment) setFirstComment(editingPost.first_comment);
+      if (editingPost.media_urls) setMediaUrls(editingPost.media_urls);
+      if (editingPost.notes) setNotes(editingPost.notes);
+      if (editingPost.scheduled_for) {
+        const date = editingPost.scheduled_for;
+        setScheduledFor(date.includes("T") ? date.slice(0, 16) : `${date}T09:00`);
+      }
+    }
+  }, [editingPost]);
 
   // UI State
   const [isGenerating, setIsGenerating] = useState(false);

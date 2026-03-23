@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List, Send, Trash2, Edit3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { ContentPost, ContentStatus } from "@/types/content";
@@ -11,9 +11,10 @@ const STATUS_FILTERS: (ContentStatus | "all")[] = ["all", "idea", "ready", "sche
 
 interface ContentCalendarProps {
   onNewPost: (date?: string) => void;
+  onEditPost?: (post: ContentPost) => void;
 }
 
-export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
+export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalendarProps) {
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const now = new Date();
     const day = now.getDay();
@@ -26,6 +27,7 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<ContentPost | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDaysToSaYmd(currentWeekStart, i));
@@ -74,6 +76,32 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
   // Check if a post has Buffer IDs (meaning it's queued in Buffer)
   const hasBufferIds = (post: ContentPost) => {
     return post.buffer_post_ids && Object.keys(post.buffer_post_ids).length > 0;
+  };
+
+  // Delete a post
+  const handleDelete = async () => {
+    if (!selectedPost || isDeleting) return;
+    
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("content_posts")
+        .delete()
+        .eq("id", selectedPost.id);
+      
+      if (error) {
+        console.error("Error deleting post:", error);
+        alert("Failed to delete post: " + error.message);
+      } else {
+        setIsModalOpen(false);
+        // Refresh posts by triggering a re-fetch
+        setPosts((prev) => prev.filter((p) => p.id !== selectedPost.id));
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -343,6 +371,28 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
                 ))}
               </div>
             </div>
+            {/* Caption Preview */}
+            {selectedPost.captions && (
+              <div>
+                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Captions</label>
+                <div className="mt-2 flex flex-col gap-3">
+                  {selectedPost.platforms.map((platform) => {
+                    const caption = selectedPost.captions?.[platform as keyof typeof selectedPost.captions];
+                    if (!caption) return null;
+                    return (
+                      <div key={platform} className="rounded-lg bg-base p-3 border border-border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs font-medium uppercase text-zinc-500">{platform}</span>
+                        </div>
+                        <div className="text-sm text-zinc-300 whitespace-pre-wrap line-clamp-4">
+                          {caption}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {selectedPost.notes && (
               <div>
                 <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Notes</label>
@@ -351,16 +401,29 @@ export default function ContentCalendar({ onNewPost }: ContentCalendarProps) {
             )}
             <div className="flex gap-3 pt-4 border-t border-border">
               <button
-                className="flex-1 px-4 py-2.5 bg-purple text-white rounded-xl text-sm font-semibold hover:bg-purple/90 transition"
+                className="flex-1 px-4 py-2.5 bg-purple text-white rounded-xl text-sm font-semibold hover:bg-purple/90 transition flex items-center justify-center gap-2"
                 onClick={() => {
-                  onNewPost(selectedPost.scheduled_for?.split("T")[0]);
-                  // Note: This only pre-fills the date for now, 
-                  // but we could extend handleNewPost to accept full post data.
+                  if (onEditPost) {
+                    onEditPost(selectedPost);
+                  } else {
+                    onNewPost(selectedPost.scheduled_for?.split("T")[0]);
+                  }
                   setIsModalOpen(false);
                 }}
               >
+                <Edit3 className="h-4 w-4" />
                 Edit Post
               </button>
+              {(selectedPost.status === "ready" || selectedPost.status === "scheduled") && (
+                <button
+                  className="px-4 py-2.5 bg-red-500/20 text-red-400 rounded-xl text-sm font-semibold hover:bg-red-500/30 transition flex items-center justify-center gap-2"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </button>
+              )}
               <button
                 className="px-4 py-2.5 bg-white/5 text-zinc-400 rounded-xl text-sm font-semibold hover:bg-white/10 hover:text-white transition"
                 onClick={() => setIsModalOpen(false)}

@@ -6,7 +6,7 @@ import ContentCalendar from "@/components/content/ContentCalendar";
 import ContentCreate from "@/components/content/ContentCreate";
 import ContentIdeas from "@/components/content/ContentIdeas";
 import ContentAnalytics from "@/components/content/ContentAnalytics";
-import { ContentIdea } from "@/types/content";
+import { ContentIdea, ContentPost } from "@/types/content";
 
 const TABS = [
   { id: "calendar", label: "Calendar", Icon: Calendar },
@@ -22,6 +22,7 @@ export default function Content() {
   const tabParam = searchParams.get("tab") as TabId;
   const [activeTab, setActiveTab] = useState<TabId>(tabParam || "calendar");
   const [selectedIdea, setSelectedIdea] = useState<Partial<ContentIdea> | null>(null);
+  const [editingPost, setEditingPost] = useState<ContentPost | null>(null);
 
   useEffect(() => {
     if (tabParam && tabParam !== activeTab) {
@@ -42,6 +43,13 @@ export default function Content() {
 
   const handleNewPost = (date?: string) => {
     setSelectedIdea(date ? { scheduled_for: date } : null);
+    setEditingPost(null);
+    handleTabChange("create");
+  };
+
+  const handleEditPost = (post: ContentPost) => {
+    setEditingPost(post);
+    setSelectedIdea(null);
     handleTabChange("create");
   };
 
@@ -68,8 +76,8 @@ export default function Content() {
       </div>
 
       <div className="min-h-0 flex-1">
-        {activeTab === "calendar" && <ContentCalendar onNewPost={handleNewPost} />}
-        {activeTab === "create" && <ContentCreate initialData={selectedIdea} />}
+        {activeTab === "calendar" && <ContentCalendar onNewPost={handleNewPost} onEditPost={handleEditPost} />}
+        {activeTab === "create" && <ContentCreate initialData={selectedIdea} editingPost={editingPost} />}
         {activeTab === "ideas" && <ContentIdeas onUseIdea={handleUseIdea} />}
         {activeTab === "analytics" && <ContentAnalytics />}
       </div>
