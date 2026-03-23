@@ -29,7 +29,7 @@ serve(async (req) => {
       })
     }
     
-    const response = await fetch('https://api.buffer.com', {
+    const response = await fetch('https://api.buffer.com/graphql', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
