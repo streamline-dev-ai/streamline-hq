@@ -59,13 +59,25 @@ async function createPost(channelId: string, caption: string, dueAt: string): Pr
     }
 
     const postData = data?.data?.createPost;
+    
+    // Debug: log the full response
+    console.log('Buffer response:', JSON.stringify(data));
+    
     if (postData?.__typename === "PostActionSuccess" && postData?.post?.id) {
       return { success: true, postId: postData.post.id };
     } else if (postData?.__typename === "MutationError") {
       return { success: false, error: postData.message };
     }
 
-    return { success: false, error: "Unknown response from Buffer" };
+    // If we got data but couldn't parse it, return the raw error
+    if (data?.errors) {
+      return { success: false, error: data.errors[0]?.message || 'GraphQL error' };
+    }
+    if (data?.error) {
+      return { success: false, error: data.error };
+    }
+    
+    return { success: false, error: "Unknown response from Buffer: " + JSON.stringify(data) };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Failed to create post" };
   }
