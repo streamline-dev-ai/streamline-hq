@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List, Send, Trash2, Edit3 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List, Send, Trash2, Edit3, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { ContentPost, ContentStatus } from "@/types/content";
@@ -400,6 +400,17 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
               </div>
             )}
             <div className="flex gap-3 pt-4 border-t border-border">
+              {selectedPost.status === "scheduled" && hasBufferIds(selectedPost) && (
+                <a
+                  href="https://buffer.com/app/posts/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 px-4 py-2.5 bg-[#168eea] text-white rounded-xl text-sm font-semibold hover:bg-[#168eea]/90 transition flex items-center justify-center gap-2"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open in Buffer to add images
+                </a>
+              )}
               <button
                 className="flex-1 px-4 py-2.5 bg-purple text-white rounded-xl text-sm font-semibold hover:bg-purple/90 transition flex items-center justify-center gap-2"
                 onClick={() => {
