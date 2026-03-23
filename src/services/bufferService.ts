@@ -33,7 +33,7 @@ async function createPost(channelId: string, caption: string, dueAt: string): Pr
         text: ${JSON.stringify(caption)}
         channelId: "${channelId}"
         schedulingType: automatic
-        mode: customSchedule
+        mode: customScheduled
         dueAt: "${dueAt}"
       }) {
         ... on PostActionSuccess { post { id text } }
