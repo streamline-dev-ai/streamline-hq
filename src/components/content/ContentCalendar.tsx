@@ -411,6 +411,17 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
                   Open in Buffer to add images
                 </a>
               )}
+              {selectedPost.status === "ready" && !hasBufferIds(selectedPost) && (
+                <a
+                  href="https://buffer.com/app/posts/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 px-4 py-2.5 bg-[#168eea] text-white rounded-xl text-sm font-semibold hover:bg-[#168eea]/90 transition flex items-center justify-center gap-2"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open Buffer
+                </a>
+              )}
               <button
                 className="flex-1 px-4 py-2.5 bg-purple text-white rounded-xl text-sm font-semibold hover:bg-purple/90 transition flex items-center justify-center gap-2"
                 onClick={() => {

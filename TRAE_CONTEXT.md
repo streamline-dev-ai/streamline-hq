@@ -133,3 +133,21 @@ Files:
 ## Next big feature requested (not built yet)
 Niche Manager + Daily Outreach Queue (`/outreach`), with new tables `niches` and `lead_queue`, queue generation logic, import flow, and analytics.
 
+## Buffer Integration (Content Module)
+The Buffer API doesn't support programmatic media uploads. The workflow is:
+
+1. Create post in Streamline with captions/hashtags
+2. Schedule or Post Now → saves to Supabase + creates text-only post in Buffer
+3. Click "Open Buffer" → goes to buffer.com/app/posts/
+4. Manually add images to scheduled posts in Buffer
+
+Environment variables needed:
+- `VITE_BUFFER_API_KEY` - Buffer API token
+- `VITE_BUFFER_INSTAGRAM_ID` - Instagram channel ID
+- `VITE_BUFFER_FACEBOOK_ID` - Facebook channel ID  
+- `VITE_BUFFER_LINKEDIN_ID` - LinkedIn channel ID
+
+Files:
+- `src/services/bufferService.ts` - Client-side Buffer integration
+- `supabase/functions/buffer-proxy/index.ts` - Edge function proxying to Buffer GraphQL API
+

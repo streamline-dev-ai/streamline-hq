@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   PlusCircle,
   AlertTriangle,
-  Zap
+  Zap,
+  ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -198,7 +199,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
   // Validate before scheduling
   const validateScheduling = (): string | null => {
     if (!bufferConfigured) {
-      return "Buffer not configured — add VITE_BUFFER_API_KEY to .env";
+      return "Buffer not configured — add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env";
     }
     if (platforms.length === 0) {
       return "Please select at least one platform";
@@ -493,9 +494,12 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
               </div>
             </div>
 
-            {/* Media Upload */}
+            {/* Media Upload - Preview Only */}
             <div>
-              <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Media</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Media (Preview Only)</label>
+                <span className="text-[10px] text-zinc-600">Add images in Buffer after scheduling</span>
+              </div>
               <div className="mt-1.5 flex flex-wrap gap-2">
                 {mediaUrls.map((url, idx) => (
                   <div key={idx} className="relative h-20 w-20 rounded-lg overflow-hidden border border-border group">
@@ -595,7 +599,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
             {!bufferConfigured && (
               <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-sm">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span>Buffer not configured — add VITE_BUFFER_API_KEY to .env</span>
+                <span>Buffer not configured — add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env</span>
               </div>
             )}
 
@@ -665,6 +669,15 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
                   </>
                 )}
               </button>
+              <a
+                href="https://buffer.com/app/posts/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-[#168eea] text-white rounded-xl text-sm font-semibold hover:bg-[#168eea]/90 transition"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open Buffer
+              </a>
               <button
                 onClick={() => savePost("posted")}
                 disabled={isSaving || isScheduling}
