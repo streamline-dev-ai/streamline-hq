@@ -1094,6 +1094,11 @@ export default function Leads() {
                             {badge.label}
                           </div>
                         ) : null}
+                        {!phone ? (
+                          <div className="inline-flex items-center rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-xs font-semibold text-yellow-300">
+                            No WhatsApp
+                          </div>
+                        ) : null}
                   </div>
                 </div>
 
