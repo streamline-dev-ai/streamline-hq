@@ -1254,12 +1254,12 @@ export default function Leads() {
         />
         <div
           className={cn(
-            "absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[800px] rounded-t-3xl border border-border bg-panel p-4 transition-transform",
+            "absolute bottom-0 left-0 right-0 mx-auto flex max-h-[calc(100dvh-16px)] w-full max-w-[800px] flex-col overflow-hidden rounded-t-3xl border border-border bg-panel p-4 transition-transform",
             "pb-[calc(env(safe-area-inset-bottom)+16px)]",
             drawerOpen ? "translate-y-0" : "translate-y-full",
           )}
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex shrink-0 items-start justify-between gap-4">
             <div>
               <div className="text-base font-semibold">Add lead</div>
               <div className="mt-1 text-sm text-zinc-400">Saved instantly to Supabase</div>
@@ -1273,6 +1273,7 @@ export default function Leads() {
             </button>
           </div>
 
+          <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1">
               <label className="text-xs text-zinc-400">Business name *</label>
@@ -1393,6 +1394,7 @@ export default function Leads() {
               Save Lead
             </button>
           </div>
+          </div>
         </div>
       </div>
 
@@ -1408,12 +1410,12 @@ export default function Leads() {
         />
         <div
           className={cn(
-            "absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[980px] rounded-t-3xl border border-border bg-panel p-4 transition-transform",
+            "absolute bottom-0 left-0 right-0 mx-auto flex max-h-[calc(100dvh-16px)] w-full max-w-[980px] flex-col overflow-hidden rounded-t-3xl border border-border bg-panel p-4 transition-transform",
             "pb-[calc(env(safe-area-inset-bottom)+16px)]",
             importOpen ? "translate-y-0" : "translate-y-full"
           )}
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex shrink-0 items-start justify-between gap-4">
             <div>
               <div className="text-base font-semibold">Import leads</div>
               <div className="mt-1 text-sm text-zinc-400">Upload an Excel file (.xlsx) to import leads in bulk</div>
@@ -1427,6 +1429,7 @@ export default function Leads() {
             </button>
           </div>
 
+          <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mt-4 grid gap-3">
             <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-base/40 px-4 py-8 text-center transition hover:border-purple/40 hover:bg-white/5">
               <input
@@ -1535,6 +1538,7 @@ export default function Leads() {
               </table>
             </div>
           ) : null}
+          </div>
         </div>
       </div>
 
@@ -1545,12 +1549,12 @@ export default function Leads() {
         />
         <div
           className={cn(
-            "absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[980px] rounded-t-3xl border border-border bg-panel p-4 transition-transform",
+            "absolute bottom-0 left-0 right-0 mx-auto flex max-h-[calc(100dvh-16px)] w-full max-w-[980px] flex-col overflow-hidden rounded-t-3xl border border-border bg-panel p-4 transition-transform",
             "pb-[calc(env(safe-area-inset-bottom)+16px)]",
             templatesOpen ? "translate-y-0" : "translate-y-full",
           )}
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex shrink-0 items-start justify-between gap-4">
             <div>
               <div className="text-base font-semibold">Outreach templates</div>
               <div className="mt-1 text-sm text-zinc-400">Variables: {"{owner_name}"} {"{business_name}"} {"{niche}"} {"{demo_url}"}</div>
@@ -1564,7 +1568,7 @@ export default function Leads() {
             </button>
           </div>
 
-          <div className="mt-4 max-h-[60vh] overflow-auto rounded-2xl border border-border">
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border">
             <div className="grid gap-3 p-3">
               {OUTREACH_TEMPLATE_META.map((t) => (
                 <div key={t.key} className="grid gap-1">
@@ -1579,7 +1583,7 @@ export default function Leads() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <div className="mt-4 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <button
               type="button"
               onClick={() => {

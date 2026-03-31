@@ -350,8 +350,8 @@ export default function Messages() {
 
       {variableModal ? (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="w-full max-w-lg rounded-3xl border border-border bg-panel p-4">
-            <div className="flex items-start justify-between gap-4">
+          <div className="flex max-h-[calc(100dvh-32px)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border bg-panel p-4">
+            <div className="flex shrink-0 items-start justify-between gap-4">
               <div>
                 <div className="text-base font-semibold">Fill variables</div>
                 <div className="mt-1 text-sm text-zinc-400">These placeholders will be replaced before copying.</div>
@@ -365,7 +365,8 @@ export default function Messages() {
               </button>
             </div>
 
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+            <div className="grid gap-3">
               {variableModal.vars.map((v) => (
                 <div key={v} className="grid gap-1">
                   <label className="text-xs text-zinc-400">{`{{${v}}}`}</label>
@@ -393,8 +394,9 @@ export default function Messages() {
                 {applyVariables(variableModal.template.text, variableModal.values)}
               </div>
             </div>
+            </div>
 
-            <div className="mt-4 flex items-center justify-end gap-2">
+            <div className="mt-4 flex shrink-0 items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setVariableModal(null)}
@@ -420,8 +422,8 @@ export default function Messages() {
 
       {editModal ? (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="w-full max-w-2xl rounded-3xl border border-border bg-panel p-4">
-            <div className="flex items-start justify-between gap-4">
+          <div className="flex max-h-[calc(100dvh-32px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border bg-panel p-4">
+            <div className="flex shrink-0 items-start justify-between gap-4">
               <div>
                 <div className="text-base font-semibold">Edit template</div>
                 <div className="mt-1 text-sm text-zinc-400">{editModal.template.name}</div>
@@ -435,13 +437,15 @@ export default function Messages() {
               </button>
             </div>
 
+            <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
             <textarea
               value={editModal.text}
               onChange={(e) => setEditModal((p) => (p ? { ...p, text: e.target.value } : p))}
-              className="mt-4 min-h-[180px] w-full rounded-2xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
+              className="min-h-[180px] w-full rounded-2xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
             />
+            </div>
 
-            <div className="mt-4 flex items-center justify-end gap-2">
+            <div className="mt-4 flex shrink-0 items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setEditModal(null)}
