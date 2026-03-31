@@ -15,44 +15,74 @@ export type OutreachTemplateKey =
   | "replied_english"
   | "demo_sent_afrikaans"
   | "demo_sent_english"
-  | "follow_up_both";
+  | "follow_up_both"
+  | "restaurant_messaged"
+  | "restaurant_replied"
+  | "restaurant_someone_building_1"
+  | "restaurant_someone_building_2";
 
 export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
-  new_afrikaans_has_name: "Hallo {owner_name}, is dit {owner_name} van {business_name}? 👋",
+  // ── Opening messages ────────────────────────────────────────────────────────
+  new_afrikaans_has_name: "Hallo, is dit {owner_name} van {business_name}? 👋",
   new_afrikaans_no_name: "Hallo, is dit die eienaar van {business_name}? 👋",
-  new_english_has_name: "Hi, is this {owner_name} from {business_name}?",
-  new_english_no_name: "Hi, is this the owner of {business_name}?",
+  new_english_has_name: "Hi, is this {owner_name} from {business_name}? 👋",
+  new_english_no_name: "Hi, is this the owner of {business_name}? 👋",
+
+  // ── Follow-up after no reply ─────────────────────────────────────────────
   messaged_afrikaans_has_name:
-    "Hallo {owner_name}! Christiaan hier. Het {business_name} op Google raakgeloop — great reviews. Het gesien julle nog nie 'n webtuiste het nie — het julle al ooit daaraan gedink om een te kry?",
+    "Hallo {owner_name}! Christiaan hier — het {business_name} op Google gesien, great reviews. Ek het gesien julle het nog nie 'n webtuiste nie — het julle al ooit daaraan gedink om een te kry?",
   messaged_afrikaans_no_name:
-    "Hallo daar! Christiaan hier. Het {business_name} op Google raakgeloop — great reviews. Het gesien julle nog nie 'n webtuiste het nie — het julle al ooit daaraan gedink om een te kry?",
+    "Hallo! Christiaan hier — het {business_name} op Google gesien, great reviews. Ek het gesien julle het nog nie 'n webtuiste nie — het julle al ooit daaraan gedink om een te kry?",
   messaged_english_has_name:
-    "Hi {owner_name}! I'm Christiaan — came across {business_name} on Google, great reviews. Noticed you don't have a website yet — ever thought about getting one?",
+    "Hi {owner_name}! Christiaan here — found {business_name} on Google, great reviews. Noticed you don't have a website yet — any particular reason, or is it something you've thought about?",
   messaged_english_no_name:
-    "Hi! I'm Christiaan — came across {business_name} on Google, great reviews. Noticed you don't have a website yet — ever thought about getting one?",
+    "Hi! Christiaan here — found {business_name} on Google, great reviews. Noticed you don't have a website yet — any particular reason, or is it something you've thought about?",
+
+  // ── After they reply ─────────────────────────────────────────────────────
   replied_afrikaans:
-    "Ek bou professionele webtuiste vir {niche} diensverskaffers in Gauteng. Ek het al 'n demo vir {business_name} gebou — sal jy belangstel om dit te sien? 👊",
+    "Ek bou webtuiste vir {niche} besighede in Gauteng — ek het al 'n vinnige demo vir {business_name} gebou om jou 'n idee te gee. Sal jy wil kyk? 😊",
   replied_english:
-    "I build professional websites for {niche} businesses in Gauteng. I actually built a quick demo for {business_name} already — want me to send it over?",
-  demo_sent_afrikaans: "Hallo {owner_name}, net vinnig — het jy kans gehad om na die demo te kyk? Laat my weet wat jy dink 😊",
-  demo_sent_english: "Hi {owner_name}, just checking — did you get a chance to look at the demo? Let me know what you think 😊",
-  follow_up_both: "Hi {owner_name}, last one from me — demo is ready whenever you want to see it 👊",
+    "I build websites for {niche} businesses in Gauteng — I actually put together a quick demo for {business_name} so you can see what it could look like. Want me to send it over? 😊",
+
+  // ── After demo is sent ───────────────────────────────────────────────────
+  demo_sent_afrikaans:
+    "Hallo {owner_name}, net vinnig — het jy kans gehad om na die demo te kyk? Laat my weet wat jy dink 😊",
+  demo_sent_english:
+    "Hi {owner_name}, just checking in — did you get a chance to look at the demo? Let me know what you think 😊",
+
+  // ── General follow-up (3+ days no reply) ────────────────────────────────
+  follow_up_both:
+    "Hi {owner_name}, just following up — happy to answer any questions or tweak the demo if needed. No pressure at all 😊",
+
+  // ── Restaurant-specific ──────────────────────────────────────────────────
+  restaurant_messaged:
+    "Hi! I actually ate at your restaurant recently — the food was excellent. Afterwards I wanted to recommend it to friends and noticed you don't have a website yet.\nI'm a web designer who specialises in restaurants. Just curious — is there a reason you haven't got one, or are you already working on it?",
+  restaurant_replied:
+    "I build websites specifically for restaurants — online menu, opening hours, a contact page, the works. I actually put together a quick demo to show you what it could look like. Would you be keen to have a look? 😊",
+  restaurant_someone_building_1:
+    "Oh nice!\nI'm a web designer who builds websites for many local restaurants. If you ever feel the current one is taking too long or you're not 100% happy with it, feel free to reach out. I'd be happy to show you some examples of what I can do.\nNo pressure at all — just letting you know.",
+  restaurant_someone_building_2:
+    "Oh great!\nIf things don't move as fast as you'd like, or you want a second option, I'm happy to build a quick demo for you to compare. Just let me know.",
 };
 
-export const OUTREACH_TEMPLATE_META: Array<{ key: OutreachTemplateKey; label: string }> = [
-  { key: "new_afrikaans_has_name", label: "New — Afrikaans (has name)" },
-  { key: "new_afrikaans_no_name", label: "New — Afrikaans (no name)" },
-  { key: "new_english_has_name", label: "New — English (has name)" },
-  { key: "new_english_no_name", label: "New — English (no name)" },
-  { key: "messaged_afrikaans_has_name", label: "Messaged — Afrikaans (has name)" },
-  { key: "messaged_afrikaans_no_name", label: "Messaged — Afrikaans (no name)" },
-  { key: "messaged_english_has_name", label: "Messaged — English (has name)" },
-  { key: "messaged_english_no_name", label: "Messaged — English (no name)" },
-  { key: "replied_afrikaans", label: "Replied — Afrikaans" },
-  { key: "replied_english", label: "Replied — English" },
-  { key: "demo_sent_afrikaans", label: "Demo sent — Afrikaans" },
+export const OUTREACH_TEMPLATE_META: Array<{ key: OutreachTemplateKey; label: string; group?: string }> = [
+  { key: "new_english_has_name", label: "Opening — English (has name)" },
+  { key: "new_english_no_name", label: "Opening — English (no name)" },
+  { key: "new_afrikaans_has_name", label: "Opening — Afrikaans (has name)" },
+  { key: "new_afrikaans_no_name", label: "Opening — Afrikaans (no name)" },
+  { key: "messaged_english_has_name", label: "2nd message — English (has name)" },
+  { key: "messaged_english_no_name", label: "2nd message — English (no name)" },
+  { key: "messaged_afrikaans_has_name", label: "2nd message — Afrikaans (has name)" },
+  { key: "messaged_afrikaans_no_name", label: "2nd message — Afrikaans (no name)" },
+  { key: "replied_english", label: "After reply — English" },
+  { key: "replied_afrikaans", label: "After reply — Afrikaans" },
   { key: "demo_sent_english", label: "Demo sent — English" },
-  { key: "follow_up_both", label: "Follow up (3+ days) — Both" },
+  { key: "demo_sent_afrikaans", label: "Demo sent — Afrikaans" },
+  { key: "follow_up_both", label: "Follow up (3+ days no reply)" },
+  { key: "restaurant_messaged", label: "🍽️ Restaurant — 2nd message" },
+  { key: "restaurant_replied", label: "🍽️ Restaurant — after reply" },
+  { key: "restaurant_someone_building_1", label: "🍽️ Restaurant — someone's building their site (v1)" },
+  { key: "restaurant_someone_building_2", label: "🍽️ Restaurant — someone's building their site (v2)" },
 ];
 
 export type OutreachLead = {
@@ -140,19 +170,14 @@ export function getOutreachMessage(lead: OutreachLead) {
 
   if (niche === "restaurant") {
     if (stage === "new") {
-      return applyVars("Hi, is this the owner of {business_name}?", vars).trim();
+      const tpl = hasName(owner_name) ? templates.new_english_has_name : templates.new_english_no_name;
+      return applyVars(tpl, vars).trim();
     }
     if (stage === "messaged") {
-      return applyVars(
-        "Hey! I actually ate at {business_name} recently — food was great. Wanted to share it with a friend afterwards and realised you guys don't have a website. Is there a reason for that?",
-        vars
-      ).trim();
+      return applyVars(templates.restaurant_messaged, vars).trim();
     }
     if (stage === "replied") {
-      return applyVars(
-        "Ah makes sense. I actually build websites — I put together a quick demo to show you what it could look like. Online menu, reservations, the works. Would you be interested in having a look?",
-        vars
-      ).trim();
+      return applyVars(templates.restaurant_replied, vars).trim();
     }
   }
 
