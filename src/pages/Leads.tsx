@@ -65,6 +65,27 @@ function isCold(lead: LeadRow): boolean {
   return daysSinceSaISOString(ref) >= 10;
 }
 
+const COLUMN_ALIASES: Record<string, string[]> = {
+  business_name: ["businessname", "business", "name", "title", "company", "shopname", "storename", "tradingname", "tradename"],
+  owner_name: ["ownername", "owner", "contactname", "contact", "firstname", "fullname", "person"],
+  phone: ["phone", "phonenumber", "tel", "telephone", "mobile", "cellphone", "cell", "whatsapp", "number", "contactnumber"],
+  email: ["email", "emailaddress", "mail"],
+  niche: ["niche", "industry", "category", "type", "sector"],
+  notes: ["notes", "note", "comment", "comments", "remarks", "description"],
+};
+
+function autoMapColumns(headers: string[]): Record<string, string> {
+  const norm = headers.map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const find = (candidates: string[]) => {
+    for (const c of candidates) {
+      const idx = norm.findIndex((h) => h === c);
+      if (idx !== -1) return headers[idx];
+    }
+    return "";
+  };
+  return Object.fromEntries(Object.entries(COLUMN_ALIASES).map(([field, aliases]) => [field, find(aliases)]));
+}
+
 function parseCsv(text: string) {
   const lines = text
     .split(/\r?\n/)
@@ -242,7 +263,12 @@ export default function Leads() {
   const [templatesDraft, setTemplatesDraft] = useState<Record<OutreachTemplateKey, string>>(() => loadOutreachTemplates());
 
   const [importOpen, setImportOpen] = useState(false);
-  const [importText, setImportText] = useState("");
+  const [importColumns, setImportColumns] = useState<string[]>([]);
+  const [importRawRows, setImportRawRows] = useState<Array<Record<string, string>>>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({
+    business_name: "", owner_name: "", phone: "", email: "", niche: "", notes: "",
+  });
+  const [importDefaultNiche, setImportDefaultNiche] = useState<NicheOption>("restaurant");
   const [importPreview, setImportPreview] = useState<
     Array<{
       id: string;
@@ -630,94 +656,51 @@ export default function Leads() {
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
 
       if (jsonData.length === 0) {
-        pushToast({ type: "error", title: "Import", message: "No data found in Excel file" });
+        pushToast({ type: "error", title: "Import", message: "No data found in file" });
         return;
       }
 
-      // First row is header
-      const header = jsonData[0].map((h) => String(h).toLowerCase().trim());
-      const dataRows = jsonData.slice(1).filter((row) => row.some((cell) => cell));
+      const rawHeaders = jsonData[0].map((h) => String(h ?? "").trim()).filter(Boolean);
+      const dataRows = jsonData
+        .slice(1)
+        .filter((row) => row.some((cell) => cell))
+        .map((row) => {
+          const record: Record<string, string> = {};
+          for (let i = 0; i < rawHeaders.length; i++) {
+            record[rawHeaders[i]] = String(row[i] ?? "").trim();
+          }
+          return record;
+        });
 
-      // Map to our format
-      const cols = header.includes("business_name") ? header : ["business_name", "owner_name", "phone", "niche", "notes"];
-      const mapped = dataRows.map((row, idx) => {
-        const record: Record<string, string> = {};
-        for (let i = 0; i < cols.length; i++) {
-          record[cols[i]] = String(row[i] ?? "");
-        }
-        const business_name = (record.business_name ?? "").trim();
-        const owner_name = (record.owner_name ?? "").trim();
-        const phone = normalizePhoneNumber((record.phone ?? "").trim());
-        const nicheRaw = (record.niche ?? "").trim().toLowerCase();
-        const niche = (NICHES as unknown as string[]).includes(nicheRaw) ? nicheRaw : nicheRaw ? "other" : "electrical";
-        const notes = (record.notes ?? "").trim();
-        return {
-          id: `${idx}-${crypto.randomUUID()}`,
-          selected: Boolean(business_name),
-          business_name,
-          owner_name,
-          phone,
-          niche,
-          notes,
-        };
-      }).filter((r) => r.business_name);
-
-      // Check for duplicates
-      const phones = Array.from(new Set(mapped.map((r) => r.phone).filter(Boolean)));
-      const existingByPhone = new Map<string, string>();
-      if (phones.length) {
-        const existingRes = await supabase.from("leads").select("phone, business_name").in("phone", phones);
-        if (existingRes.error) throw existingRes.error;
-        for (const row of existingRes.data ?? []) {
-          const p = normalizePhoneNumber((row as any).phone ?? "");
-          const b = String((row as any).business_name ?? "");
-          if (p) existingByPhone.set(p, b);
-        }
-      }
-
-      const seenInPaste = new Set<string>();
-      const withDuplicates = mapped.map((r) => {
-        const p = r.phone;
-        const duplicateExisting = p ? existingByPhone.has(p) : false;
-        const duplicatePaste = p ? seenInPaste.has(p) : false;
-        if (p) seenInPaste.add(p);
-
-        const duplicate = duplicateExisting || duplicatePaste;
-        const duplicate_business_name = duplicateExisting ? existingByPhone.get(p) ?? null : duplicatePaste ? "Duplicate in paste" : null;
-        const action: "insert" | "skip" | "update" = duplicateExisting ? "skip" : duplicatePaste ? "skip" : "insert";
-        return { ...r, duplicate, duplicate_business_name, action };
-      });
-
-      setImportPreview(withDuplicates);
-      if (withDuplicates.length === 0) pushToast({ type: "error", title: "Import", message: "No valid rows found" });
+      setImportColumns(rawHeaders);
+      setImportRawRows(dataRows);
+      setColumnMapping(autoMapColumns(rawHeaders));
+      setImportPreview([]);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to parse Excel file";
+      const msg = e instanceof Error ? e.message : "Failed to parse file";
       pushToast({ type: "error", title: "Import", message: msg });
     } finally {
       setImportParsing(false);
     }
   }
 
-  async function parseImport() {
+  async function buildPreviewFromMapping() {
+    if (!columnMapping.business_name) {
+      pushToast({ type: "error", title: "Import", message: "Please map the Business Name column" });
+      return;
+    }
     setImportParsing(true);
     try {
-      // Check if input looks like XML (Excel file) - but this should be handled by handleExcelFile
-      // This is for pasted CSV text
-      if (importText.trim().startsWith("<?xml") || importText.trim().startsWith("<workbook") || importText.trim().startsWith("PK")) {
-        pushToast({ type: "error", title: "Import", message: "Please use the file upload button to import Excel files" });
-        setImportParsing(false);
-        return;
-      }
-
-      const rows = parseCsv(importText);
-      const base = rows
-        .map((r, idx) => {
-          const business_name = (r.business_name ?? "").trim();
-          const owner_name = (r.owner_name ?? "").trim();
-          const phone = normalizePhoneNumber((r.phone ?? "").trim());
-          const nicheRaw = (r.niche ?? "").trim().toLowerCase();
-          const niche = (NICHES as unknown as string[]).includes(nicheRaw) ? nicheRaw : nicheRaw ? "other" : "electrical";
-          const notes = (r.notes ?? "").trim();
+      const base = importRawRows
+        .map((row, idx) => {
+          const business_name = (row[columnMapping.business_name] ?? "").trim();
+          const owner_name = columnMapping.owner_name ? (row[columnMapping.owner_name] ?? "").trim() : "";
+          const rawPhone = columnMapping.phone ? (row[columnMapping.phone] ?? "").trim() : "";
+          const phone = normalizePhoneNumber(rawPhone);
+          const nicheFromFile = columnMapping.niche ? (row[columnMapping.niche] ?? "").trim().toLowerCase() : "";
+          const nicheRaw = nicheFromFile || importDefaultNiche;
+          const niche = (NICHES as unknown as string[]).includes(nicheRaw) ? nicheRaw : nicheRaw ? "other" : importDefaultNiche;
+          const notes = columnMapping.notes ? (row[columnMapping.notes] ?? "").trim() : "";
           return {
             id: `${idx}-${crypto.randomUUID()}`,
             selected: Boolean(business_name),
@@ -748,7 +731,6 @@ export default function Leads() {
         const duplicateExisting = p ? existingByPhone.has(p) : false;
         const duplicatePaste = p ? seenInPaste.has(p) : false;
         if (p) seenInPaste.add(p);
-
         const duplicate = duplicateExisting || duplicatePaste;
         const duplicate_business_name = duplicateExisting ? existingByPhone.get(p) ?? null : duplicatePaste ? "Duplicate in paste" : null;
         const action: "insert" | "skip" | "update" = duplicateExisting ? "skip" : duplicatePaste ? "skip" : "insert";
@@ -757,10 +739,13 @@ export default function Leads() {
 
       setImportPreview(mapped);
       if (mapped.length === 0) pushToast({ type: "error", title: "Import", message: "No valid rows found" });
+    } catch (e) {
+      pushToast({ type: "error", title: "Import", message: e instanceof Error ? e.message : "Failed to build preview" });
     } finally {
       setImportParsing(false);
     }
   }
+
 
   async function importSelected() {
     const selected = importPreview.filter((r) => r.selected && r.action !== "skip");
@@ -842,7 +827,8 @@ export default function Leads() {
         message: `${rowsToInsert.length} inserted, ${updates.length} updated`,
       });
       setImportOpen(false);
-      setImportText("");
+      setImportColumns([]);
+      setImportRawRows([]);
       setImportPreview([]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to import";
@@ -1418,11 +1404,13 @@ export default function Leads() {
           <div className="flex shrink-0 items-start justify-between gap-4">
             <div>
               <div className="text-base font-semibold">Import leads</div>
-              <div className="mt-1 text-sm text-zinc-400">Upload an Excel file (.xlsx) to import leads in bulk</div>
+              <div className="mt-1 text-sm text-zinc-400">
+                {importColumns.length === 0 ? "Upload an Excel file to get started" : importPreview.length === 0 ? `${importRawRows.length} rows detected — map the columns below` : `${importPreview.filter((r) => r.selected && r.action !== "skip").length} leads ready to import`}
+              </div>
             </div>
             <button
               type="button"
-              onClick={() => setImportOpen(false)}
+              onClick={() => { setImportOpen(false); setImportColumns([]); setImportRawRows([]); setImportPreview([]); }}
               className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
             >
               Close
@@ -1430,114 +1418,184 @@ export default function Leads() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mt-4 grid gap-3">
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-base/40 px-4 py-8 text-center transition hover:border-purple/40 hover:bg-white/5">
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void handleExcelFile(file);
-                  e.target.value = "";
-                }}
-                className="hidden"
-              />
-              <Upload className="h-8 w-8 text-zinc-400" />
-              <div>
-                <div className="text-sm font-semibold text-zinc-100">Click to upload Excel file</div>
-                <div className="mt-1 text-xs text-zinc-400">.xlsx or .xls — columns: business_name, owner_name, phone, niche, notes</div>
-              </div>
-              {importParsing ? <div className="text-xs text-zinc-400">Parsing…</div> : null}
-            </label>
 
-            {importPreview.length > 0 ? (
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm text-zinc-400">
-                  {importPreview.filter((r) => r.selected && r.action !== "skip").length} lead{importPreview.filter((r) => r.selected && r.action !== "skip").length !== 1 ? "s" : ""} ready to import
+          {/* Step 1: File upload */}
+          {importColumns.length === 0 ? (
+            <div className="mt-4">
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-base/40 px-4 py-10 text-center transition hover:border-purple/40 hover:bg-white/5">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => { const file = e.target.files?.[0]; if (file) void handleExcelFile(file); e.target.value = ""; }}
+                  className="hidden"
+                />
+                <Upload className="h-8 w-8 text-zinc-400" />
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">Click to upload Excel file</div>
+                  <div className="mt-1 text-xs text-zinc-400">.xlsx or .xls — any column layout, you'll map them next</div>
                 </div>
+                {importParsing ? <div className="text-xs text-zinc-400">Reading file…</div> : null}
+              </label>
+            </div>
+          ) : importPreview.length === 0 ? (
+            /* Step 2: Column mapping */
+            <div className="mt-4 grid gap-4">
+              <div className="rounded-2xl border border-border bg-base/40 p-4">
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Map columns from your file</div>
+                <div className="grid gap-2">
+                  {([
+                    { key: "business_name", label: "Business name", required: true },
+                    { key: "owner_name", label: "Owner name", required: false },
+                    { key: "phone", label: "Phone", required: false },
+                    { key: "email", label: "Email", required: false },
+                    { key: "notes", label: "Notes", required: false },
+                  ] as const).map(({ key, label, required }) => (
+                    <div key={key} className="flex items-center gap-3">
+                      <div className="w-28 shrink-0 text-sm text-zinc-300">
+                        {label}{required ? <span className="ml-0.5 text-rose-400">*</span> : null}
+                      </div>
+                      <select
+                        value={columnMapping[key]}
+                        onChange={(e) => setColumnMapping((p) => ({ ...p, [key]: e.target.value }))}
+                        className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                      >
+                        <option value="">{required ? "— select column —" : "(not mapped)"}</option>
+                        {importColumns.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-base/40 p-4">
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Niche</div>
+                <div className="flex items-center gap-3">
+                  <div className="w-28 shrink-0 text-sm text-zinc-300">Niche column</div>
+                  <select
+                    value={columnMapping.niche}
+                    onChange={(e) => setColumnMapping((p) => ({ ...p, niche: e.target.value }))}
+                    className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                  >
+                    <option value="">(use default below)</option>
+                    {importColumns.map((col) => (
+                      <option key={col} value={col}>{col}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="w-28 shrink-0 text-sm text-zinc-300">Default niche</div>
+                  <select
+                    value={importDefaultNiche}
+                    onChange={(e) => setImportDefaultNiche(e.target.value as NicheOption)}
+                    className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                  >
+                    {NICHES.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                  <div className="text-xs text-zinc-500">Used when niche column is empty or not mapped</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setImportColumns([]); setImportRawRows([]); }}
+                  className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+                >
+                  ← Change file
+                </button>
+                <button
+                  type="button"
+                  disabled={!columnMapping.business_name || importParsing}
+                  onClick={() => void buildPreviewFromMapping()}
+                  className={cn("rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110", (!columnMapping.business_name || importParsing) && "opacity-60")}
+                >
+                  {importParsing ? "Building preview…" : `Preview ${importRawRows.length} rows`}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Step 3: Preview + Import */
+            <div className="mt-4 grid gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setImportPreview([])}
+                  className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+                >
+                  ← Back to mapping
+                </button>
                 <button
                   type="button"
                   disabled={importing}
                   onClick={() => void importSelected()}
                   className={cn("rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110", importing && "opacity-60")}
                 >
-                  {importing ? "Importing…" : "Import selected"}
+                  {importing ? "Importing…" : `Import ${importPreview.filter((r) => r.selected && r.action !== "skip").length} leads`}
                 </button>
               </div>
-            ) : null}
-          </div>
 
-          {importPreview.length ? (
-            <div className="mt-4 overflow-auto rounded-2xl border border-border">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-base/40 text-xs text-zinc-400">
-                  <tr>
-                    <th className="p-2">Use</th>
-                    <th className="p-2">Status</th>
-                    <th className="p-2">Action</th>
-                    <th className="p-2">Business</th>
-                    <th className="p-2">Owner</th>
-                    <th className="p-2">Phone</th>
-                    <th className="p-2">Niche</th>
-                    <th className="p-2">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importPreview.map((r) => (
-                    <tr
-                      key={r.id}
-                      className={cn(
-                        "border-t border-border bg-panel",
-                        r.duplicate && "bg-rose-500/10",
-                      )}
-                    >
-                      <td className="p-2">
-                        <input
-                          type="checkbox"
-                          checked={r.selected}
-                          onChange={(e) =>
-                            setImportPreview((prev) => prev.map((x) => (x.id === r.id ? { ...x, selected: e.target.checked } : x)))
-                          }
-                        />
-                      </td>
-                      <td className="p-2 text-zinc-300">
-                        {r.duplicate ? (
-                          <span className="font-semibold text-rose-300">{`Duplicate${r.duplicate_business_name ? `: ${r.duplicate_business_name}` : ""}`}</span>
-                        ) : (
-                          <span className="text-emerald-300">New</span>
-                        )}
-                      </td>
-                      <td className="p-2">
-                        {r.duplicate ? (
-                          <select
-                            value={r.action}
-                            onChange={(e) =>
-                              setImportPreview((prev) =>
-                                prev.map((x) =>
-                                  x.id === r.id ? { ...x, action: e.target.value as any, selected: true } : x,
-                                ),
-                              )
-                            }
-                            className="rounded-xl border border-border bg-base/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple/40"
-                          >
-                            <option value="skip">Skip</option>
-                            <option value="update">Update existing</option>
-                          </select>
-                        ) : (
-                          <div className="text-xs font-semibold text-zinc-300">Insert</div>
-                        )}
-                      </td>
-                      <td className="p-2 text-zinc-100">{r.business_name}</td>
-                      <td className="p-2 text-zinc-300">{r.owner_name || "—"}</td>
-                      <td className="p-2 text-zinc-300">{r.phone || "—"}</td>
-                      <td className="p-2 text-zinc-300">{r.niche}</td>
-                      <td className="p-2 text-zinc-400">{r.notes ? (r.notes.length > 60 ? `${r.notes.slice(0, 60)}…` : r.notes) : ""}</td>
+              <div className="overflow-auto rounded-2xl border border-border">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-base/40 text-xs text-zinc-400">
+                    <tr>
+                      <th className="p-2">Use</th>
+                      <th className="p-2">Status</th>
+                      <th className="p-2">Action</th>
+                      <th className="p-2">Business</th>
+                      <th className="p-2">Owner</th>
+                      <th className="p-2">Phone</th>
+                      <th className="p-2">Niche</th>
+                      <th className="p-2">Notes</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {importPreview.map((r) => (
+                      <tr key={r.id} className={cn("border-t border-border bg-panel", r.duplicate && "bg-rose-500/10")}>
+                        <td className="p-2">
+                          <input
+                            type="checkbox"
+                            checked={r.selected}
+                            onChange={(e) => setImportPreview((prev) => prev.map((x) => (x.id === r.id ? { ...x, selected: e.target.checked } : x)))}
+                          />
+                        </td>
+                        <td className="p-2 text-zinc-300">
+                          {r.duplicate ? (
+                            <span className="font-semibold text-rose-300">{`Duplicate${r.duplicate_business_name ? `: ${r.duplicate_business_name}` : ""}`}</span>
+                          ) : (
+                            <span className="text-emerald-300">New</span>
+                          )}
+                        </td>
+                        <td className="p-2">
+                          {r.duplicate ? (
+                            <select
+                              value={r.action}
+                              onChange={(e) => setImportPreview((prev) => prev.map((x) => (x.id === r.id ? { ...x, action: e.target.value as any, selected: true } : x)))}
+                              className="rounded-xl border border-border bg-base/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple/40"
+                            >
+                              <option value="skip">Skip</option>
+                              <option value="update">Update existing</option>
+                            </select>
+                          ) : (
+                            <div className="text-xs font-semibold text-zinc-300">Insert</div>
+                          )}
+                        </td>
+                        <td className="p-2 text-zinc-100">{r.business_name}</td>
+                        <td className="p-2 text-zinc-300">{r.owner_name || "—"}</td>
+                        <td className="p-2 text-zinc-300">{r.phone || "—"}</td>
+                        <td className="p-2 text-zinc-300">{r.niche}</td>
+                        <td className="p-2 text-zinc-400">{r.notes ? (r.notes.length > 60 ? `${r.notes.slice(0, 60)}…` : r.notes) : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          ) : null}
+          )}
+
           </div>
         </div>
       </div>
