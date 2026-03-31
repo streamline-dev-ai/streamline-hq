@@ -17,7 +17,7 @@ import {
   type OutreachTemplateKey,
 } from "@/lib/outreach";
 
-type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost";
+type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost" | "no_whatsapp";
 
 type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "other";
 
@@ -53,13 +53,13 @@ function nicheBadge(niche: string | null) {
 function isFollowUpDue(lead: LeadRow, today: string) {
   if (!lead.follow_up_due) return false;
   const stage = (lead.stage ?? "new").toLowerCase();
-  if (stage === "closed" || stage === "lost") return false;
+  if (stage === "closed" || stage === "lost" || stage === "no_whatsapp") return false;
   return daysBetweenSaYmd(today, lead.follow_up_due) >= 0;
 }
 
 function isCold(lead: LeadRow): boolean {
   const stage = (lead.stage ?? "new").toLowerCase();
-  if (stage === "closed" || stage === "lost") return false;
+  if (stage === "closed" || stage === "lost" || stage === "no_whatsapp") return false;
   const ref = lead.last_contact_at ?? lead.created_at ?? null;
   if (!ref) return false;
   return daysSinceSaISOString(ref) >= 10;
@@ -141,6 +141,7 @@ const STAGES: { key: LeadStage; label: string }[] = [
   { key: "proposal_sent", label: "Proposal" },
   { key: "closed", label: "Closed" },
   { key: "lost", label: "Lost" },
+  { key: "no_whatsapp", label: "No WhatsApp" },
 ];
 
 const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = [
@@ -151,6 +152,7 @@ const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = 
   { key: "demo_sent", label: "Demo Sent", stage: "demo_sent" },
   { key: "proposal_sent", label: "Proposal", stage: "proposal_sent" },
   { key: "closed", label: "Closed", stage: "closed" },
+  { key: "no_whatsapp", label: "No WhatsApp", stage: "no_whatsapp" },
 ];
 
 type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted" | "cold";
@@ -168,6 +170,7 @@ function stageBadge(stage: string | null) {
   if (s === "proposal_sent") return "bg-orange/15 text-orange border-orange/25";
   if (s === "closed") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
   if (s === "lost") return "bg-rose-500/15 text-rose-300 border-rose-500/25";
+  if (s === "no_whatsapp") return "bg-yellow-500/15 text-yellow-300 border-yellow-500/25";
   return "bg-zinc-500/15 text-zinc-300 border-zinc-500/25";
 }
 
