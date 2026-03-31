@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Clipboard, ExternalLink, Mail, Phone, X } from "lucide-react";
+import { Clipboard, ExternalLink, Mail, Phone, X, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -96,6 +96,7 @@ export default function LeadDetailsDrawer({
   const [savingNiche, setSavingNiche] = useState(false);
   const [notesValue, setNotesValue] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const leadContext: LeadContext | null = useMemo(() => {
     if (!lead) return null;
@@ -258,6 +259,23 @@ export default function LeadDetailsDrawer({
     }
   }
 
+  async function deleteLead() {
+    if (!lead) return;
+    if (!confirm("Are you sure you want to delete this lead?")) return;
+    setDeleting(true);
+    try {
+      const r = await supabase.from("leads").delete().eq("id", lead.id);
+      if (r.error) throw r.error;
+      pushToast({ type: "success", title: "Deleted", message: "Lead removed" });
+      onClose();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to delete lead";
+      pushToast({ type: "error", title: "Delete", message: msg });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function addMessage() {
     if (!lead) return;
     const text = newText.trim();
@@ -348,6 +366,15 @@ export default function LeadDetailsDrawer({
             <div className="text-base font-semibold text-zinc-100">{lead?.business_name ?? "Lead"}</div>
             <div className="mt-1 text-sm text-zinc-400">{lead?.owner_name ? lead.owner_name : "No owner name"}</div>
           </div>
+          <button
+            type="button"
+            onClick={deleteLead}
+            disabled={deleting}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+            title="Delete lead"
+          >
+            <Trash2 className={cn("h-4 w-4", deleting && "animate-pulse")} />
+          </button>
           <button
             type="button"
             onClick={onClose}

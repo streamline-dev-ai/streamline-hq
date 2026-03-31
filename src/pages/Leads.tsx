@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, ExternalLink, Phone, RefreshCcw, BarChart3, MessageSquareText, Upload } from "lucide-react";
+import { Plus, Search, ExternalLink, Phone, RefreshCcw, BarChart3, MessageSquareText, Upload, Trash2 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { addDaysToSaYmd, daysBetweenSaYmd, daysSinceSaISOString, getSaDateString } from "@/utils/saDate";
@@ -40,6 +41,7 @@ type LeadRow = {
   demo_url: string | null;
   notes: string | null;
   opener_used: string | null;
+  created_at?: string | null;
 };
 
 function nicheBadge(niche: string | null) {
@@ -53,6 +55,14 @@ function isFollowUpDue(lead: LeadRow, today: string) {
   const stage = (lead.stage ?? "new").toLowerCase();
   if (stage === "closed" || stage === "lost") return false;
   return daysBetweenSaYmd(today, lead.follow_up_due) >= 0;
+}
+
+function isCold(lead: LeadRow): boolean {
+  const stage = (lead.stage ?? "new").toLowerCase();
+  if (stage === "closed" || stage === "lost") return false;
+  const ref = lead.last_contact_at ?? lead.created_at ?? null;
+  if (!ref) return false;
+  return daysSinceSaISOString(ref) >= 10;
 }
 
 function parseCsv(text: string) {
@@ -122,7 +132,7 @@ const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = 
   { key: "closed", label: "Closed", stage: "closed" },
 ];
 
-type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted";
+type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted" | "cold";
 
 function normalizePhoneNumber(raw: string) {
   return raw.replace(/[^0-9]/g, "");
@@ -252,14 +262,16 @@ export default function Leads() {
 
   const counts = useMemo(() => {
     const scoped = nicheFilter === "all" ? leads : leads.filter((l) => (l.niche ?? "").toLowerCase() === nicheFilter);
+    const nonCold = scoped.filter((l) => !isCold(l));
+    const cold = scoped.filter((l) => isCold(l)).length;
     const map = new Map<string, number>();
-    for (const l of scoped) {
+    for (const l of nonCold) {
       const k = (l.stage ?? "new").toLowerCase();
       map.set(k, (map.get(k) ?? 0) + 1);
     }
-    const followUpDue = scoped.filter((l) => isFollowUpDue(l, saToday)).length;
-    const notContacted = scoped.filter((l) => (l.stage ?? "new").toLowerCase() === "new" && !l.last_contact_at).length;
-    return { map, followUpDue, notContacted, scopedCount: scoped.length };
+    const followUpDue = nonCold.filter((l) => isFollowUpDue(l, saToday)).length;
+    const notContacted = nonCold.filter((l) => (l.stage ?? "new").toLowerCase() === "new" && !l.last_contact_at).length;
+    return { map, followUpDue, notContacted, scopedCount: nonCold.length, cold };
   }, [leads, nicheFilter, saToday]);
 
   const stats = useMemo(() => {
@@ -292,6 +304,8 @@ export default function Leads() {
         if (nicheFilter !== "all") {
           if ((l.niche ?? "").toLowerCase() !== nicheFilter) return false;
         }
+        if (filter === "cold") return isCold(l);
+        if (isCold(l)) return false;
         if (filter === "all") return true;
         if (filter === "follow_up_due") return isFollowUpDue(l, saToday);
         if (filter === "not_contacted") return (l.stage ?? "new").toLowerCase() === "new" && !l.last_contact_at;
@@ -311,9 +325,9 @@ export default function Leads() {
     setLoading(true);
     try {
       const selectWithLanguage =
-        "id, business_name, owner_name, phone, email, niche, language, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used";
+        "id, business_name, owner_name, phone, email, niche, language, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used, created_at";
       const selectWithoutLanguage =
-        "id, business_name, owner_name, phone, email, niche, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used";
+        "id, business_name, owner_name, phone, email, niche, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used, created_at";
 
       const run = async (includeLanguage: boolean) => {
         return await supabase
@@ -529,6 +543,19 @@ export default function Leads() {
     }
   }
 
+  async function deleteLead(leadId: string) {
+    if (!confirm("Are you sure you want to delete this lead?")) return;
+    try {
+      const res = await supabase.from("leads").delete().eq("id", leadId);
+      if (res.error) throw res.error;
+      setLeads((prev) => prev.filter((l) => l.id !== leadId));
+      pushToast({ type: "success", title: "Deleted", message: "Lead removed" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to delete lead";
+      pushToast({ type: "error", title: "Delete", message: msg });
+    }
+  }
+
   async function submitLead() {
     const business_name = form.business_name.trim();
     if (!business_name) {
@@ -593,9 +620,95 @@ export default function Leads() {
     }
   }
 
+  async function handleExcelFile(file: File) {
+    setImportParsing(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+
+      if (jsonData.length === 0) {
+        pushToast({ type: "error", title: "Import", message: "No data found in Excel file" });
+        return;
+      }
+
+      // First row is header
+      const header = jsonData[0].map((h) => String(h).toLowerCase().trim());
+      const dataRows = jsonData.slice(1).filter((row) => row.some((cell) => cell));
+
+      // Map to our format
+      const cols = header.includes("business_name") ? header : ["business_name", "owner_name", "phone", "niche", "notes"];
+      const mapped = dataRows.map((row, idx) => {
+        const record: Record<string, string> = {};
+        for (let i = 0; i < cols.length; i++) {
+          record[cols[i]] = String(row[i] ?? "");
+        }
+        const business_name = (record.business_name ?? "").trim();
+        const owner_name = (record.owner_name ?? "").trim();
+        const phone = normalizePhoneNumber((record.phone ?? "").trim());
+        const nicheRaw = (record.niche ?? "").trim().toLowerCase();
+        const niche = (NICHES as unknown as string[]).includes(nicheRaw) ? nicheRaw : nicheRaw ? "other" : "electrical";
+        const notes = (record.notes ?? "").trim();
+        return {
+          id: `${idx}-${crypto.randomUUID()}`,
+          selected: Boolean(business_name),
+          business_name,
+          owner_name,
+          phone,
+          niche,
+          notes,
+        };
+      }).filter((r) => r.business_name);
+
+      // Check for duplicates
+      const phones = Array.from(new Set(mapped.map((r) => r.phone).filter(Boolean)));
+      const existingByPhone = new Map<string, string>();
+      if (phones.length) {
+        const existingRes = await supabase.from("leads").select("phone, business_name").in("phone", phones);
+        if (existingRes.error) throw existingRes.error;
+        for (const row of existingRes.data ?? []) {
+          const p = normalizePhoneNumber((row as any).phone ?? "");
+          const b = String((row as any).business_name ?? "");
+          if (p) existingByPhone.set(p, b);
+        }
+      }
+
+      const seenInPaste = new Set<string>();
+      const withDuplicates = mapped.map((r) => {
+        const p = r.phone;
+        const duplicateExisting = p ? existingByPhone.has(p) : false;
+        const duplicatePaste = p ? seenInPaste.has(p) : false;
+        if (p) seenInPaste.add(p);
+
+        const duplicate = duplicateExisting || duplicatePaste;
+        const duplicate_business_name = duplicateExisting ? existingByPhone.get(p) ?? null : duplicatePaste ? "Duplicate in paste" : null;
+        const action: "insert" | "skip" | "update" = duplicateExisting ? "skip" : duplicatePaste ? "skip" : "insert";
+        return { ...r, duplicate, duplicate_business_name, action };
+      });
+
+      setImportPreview(withDuplicates);
+      if (withDuplicates.length === 0) pushToast({ type: "error", title: "Import", message: "No valid rows found" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to parse Excel file";
+      pushToast({ type: "error", title: "Import", message: msg });
+    } finally {
+      setImportParsing(false);
+    }
+  }
+
   async function parseImport() {
     setImportParsing(true);
     try {
+      // Check if input looks like XML (Excel file) - but this should be handled by handleExcelFile
+      // This is for pasted CSV text
+      if (importText.trim().startsWith("<?xml") || importText.trim().startsWith("<workbook") || importText.trim().startsWith("PK")) {
+        pushToast({ type: "error", title: "Import", message: "Please use the file upload button to import Excel files" });
+        setImportParsing(false);
+        return;
+      }
+
       const rows = parseCsv(importText);
       const base = rows
         .map((r, idx) => {
@@ -875,6 +988,27 @@ export default function Leads() {
                 {counts.notContacted}
               </span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setFilter("cold")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
+                filter === "cold"
+                  ? "border-sky-500/30 bg-sky-500/15 text-sky-300"
+                  : "border-border bg-base/40 text-zinc-300 hover:bg-white/5",
+              )}
+            >
+              <span>Cold</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs",
+                  filter === "cold" ? "bg-sky-500/20 text-sky-300" : "bg-white/5 text-zinc-300",
+                )}
+              >
+                {counts.cold}
+              </span>
+            </button>
               </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
@@ -951,6 +1085,14 @@ export default function Leads() {
                         ) : null}
                   </div>
                   <div className="flex flex-col items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => deleteLead(lead.id)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-base/40 text-zinc-400 hover:bg-rose-500/20 hover:text-rose-300"
+                      title="Delete lead"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                     <div className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", stageBadge(stage))}>
                       {formatStageLabel(stage)}
                     </div>
@@ -1052,6 +1194,14 @@ export default function Leads() {
                 ) : null}
 
                 <div className="mt-4 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => deleteLead(lead.id)}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/20"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete Lead
+                  </button>
                   <div className="grid grid-cols-1 gap-2">
                     <label className="text-xs text-zinc-400">Update Stage</label>
                     <div className="flex items-center gap-2">
@@ -1266,7 +1416,7 @@ export default function Leads() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-base font-semibold">Import leads</div>
-              <div className="mt-1 text-sm text-zinc-400">Paste CSV: `business_name,owner_name,phone,niche,notes`</div>
+              <div className="mt-1 text-sm text-zinc-400">Upload an Excel file (.xlsx) to import leads in bulk</div>
             </div>
             <button
               type="button"
@@ -1277,34 +1427,41 @@ export default function Leads() {
             </button>
           </div>
 
-          <div className="mt-4 grid gap-2">
-            <textarea
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              className="min-h-[160px] w-full rounded-2xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
-              placeholder="business_name,owner_name,phone,niche,notes\nEddie's Electrical,Eddie,27832350718,electrical,\n"
-            />
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                disabled={importParsing}
-                onClick={() => void parseImport()}
-                className={cn(
-                  "rounded-xl border border-border bg-base/40 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/5",
-                  importParsing && "opacity-60"
-                )}
-              >
-                Parse & Preview
-              </button>
-              <button
-                type="button"
-                disabled={importing}
-                onClick={() => void importSelected()}
-                className={cn("rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110", importing && "opacity-60")}
-              >
-                Import selected
-              </button>
-            </div>
+          <div className="mt-4 grid gap-3">
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-base/40 px-4 py-8 text-center transition hover:border-purple/40 hover:bg-white/5">
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleExcelFile(file);
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+              <Upload className="h-8 w-8 text-zinc-400" />
+              <div>
+                <div className="text-sm font-semibold text-zinc-100">Click to upload Excel file</div>
+                <div className="mt-1 text-xs text-zinc-400">.xlsx or .xls — columns: business_name, owner_name, phone, niche, notes</div>
+              </div>
+              {importParsing ? <div className="text-xs text-zinc-400">Parsing…</div> : null}
+            </label>
+
+            {importPreview.length > 0 ? (
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm text-zinc-400">
+                  {importPreview.filter((r) => r.selected && r.action !== "skip").length} lead{importPreview.filter((r) => r.selected && r.action !== "skip").length !== 1 ? "s" : ""} ready to import
+                </div>
+                <button
+                  type="button"
+                  disabled={importing}
+                  onClick={() => void importSelected()}
+                  className={cn("rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110", importing && "opacity-60")}
+                >
+                  {importing ? "Importing…" : "Import selected"}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {importPreview.length ? (
