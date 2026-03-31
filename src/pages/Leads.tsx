@@ -17,7 +17,7 @@ import {
   type OutreachTemplateKey,
 } from "@/lib/outreach";
 
-type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost" | "no_whatsapp";
+type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost" | "no_whatsapp" | "needs_attention";
 
 type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "other";
 
@@ -142,6 +142,7 @@ const STAGES: { key: LeadStage; label: string }[] = [
   { key: "closed", label: "Closed" },
   { key: "lost", label: "Lost" },
   { key: "no_whatsapp", label: "No WhatsApp" },
+  { key: "needs_attention", label: "Needs Attention" },
 ];
 
 const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = [
@@ -153,6 +154,7 @@ const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = 
   { key: "proposal_sent", label: "Proposal", stage: "proposal_sent" },
   { key: "closed", label: "Closed", stage: "closed" },
   { key: "no_whatsapp", label: "No WhatsApp", stage: "no_whatsapp" },
+  { key: "needs_attention", label: "Needs Attention", stage: "needs_attention" },
 ];
 
 type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted" | "cold";
@@ -171,6 +173,7 @@ function stageBadge(stage: string | null) {
   if (s === "closed") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
   if (s === "lost") return "bg-rose-500/15 text-rose-300 border-rose-500/25";
   if (s === "no_whatsapp") return "bg-yellow-500/15 text-yellow-300 border-yellow-500/25";
+  if (s === "needs_attention") return "bg-violet-500/15 text-violet-300 border-violet-500/25";
   return "bg-zinc-500/15 text-zinc-300 border-zinc-500/25";
 }
 
