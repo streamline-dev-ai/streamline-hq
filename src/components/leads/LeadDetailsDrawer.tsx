@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { formatZAPhone } from "@/lib/phone";
 import { Clipboard, ExternalLink, Mail, Phone, X, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,7 @@ type LeadRow = {
   business_name: string;
   owner_name: string | null;
   phone: string | null;
+  alt_phone: string | null;
   email: string | null;
   niche: string | null;
   language?: string | null;
@@ -38,9 +40,6 @@ type StageEventRow = {
   changed_at: string;
 };
 
-function normalizePhoneNumber(raw: string) {
-  return raw.replace(/[^0-9]/g, "");
-}
 
 function formatStageLabel(stage: string | null) {
   const s = (stage ?? "new").toLowerCase();
@@ -333,8 +332,10 @@ export default function LeadDetailsDrawer({
     };
   }, [lead, open]);
 
-  const phone = lead?.phone ? normalizePhoneNumber(lead.phone) : "";
+  const phone = lead?.phone ? formatZAPhone(lead.phone) : "";
+  const altPhone = lead?.alt_phone ? formatZAPhone(lead.alt_phone) : "";
   const wa = phone ? `https://wa.me/${phone}` : null;
+  const waAlt = altPhone ? `https://wa.me/${altPhone}` : null;
   const today = getSaDateString();
   const overdueDays = lead?.follow_up_due ? daysBetweenSaYmd(today, lead.follow_up_due) : null;
 
@@ -434,6 +435,18 @@ export default function LeadDetailsDrawer({
                         No phone
                       </div>
                     )}
+                    {waAlt ? (
+                      <a
+                        href={waAlt}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-100 hover:bg-white/5"
+                        title="Alternative number"
+                      >
+                        <Phone className="h-4 w-4 opacity-60" />
+                        {altPhone}
+                      </a>
+                    ) : null}
                     {lead.email ? (
                       <a
                         href={`mailto:${lead.email}`}

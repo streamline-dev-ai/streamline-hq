@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatZAPhone, parseAndFormatPhones } from "@/lib/phone";
 import { Plus, Search, ExternalLink, Phone, RefreshCcw, BarChart3, MessageSquareText, Upload, Trash2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
@@ -30,6 +31,7 @@ type LeadRow = {
   business_name: string;
   owner_name: string | null;
   phone: string | null;
+  alt_phone: string | null;
   email: string | null;
   niche: string | null;
   language?: string | null;
@@ -160,7 +162,7 @@ const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = 
 type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted" | "cold";
 
 function normalizePhoneNumber(raw: string) {
-  return raw.replace(/[^0-9]/g, "");
+  return formatZAPhone(raw);
 }
 
 function stageBadge(stage: string | null) {
@@ -596,7 +598,9 @@ export default function Leads() {
     }
 
     const owner_name = form.owner_name.trim() || null;
-    const phone = normalizePhoneNumber(form.phone.trim()) || null;
+    const { phone: rawPhone1, altPhone: rawAltPhone1 } = parseAndFormatPhones(form.phone.trim());
+    const phone = rawPhone1 || null;
+    const alt_phone = rawAltPhone1 || null;
     const demo_url = form.demo_url.trim() || null;
 
     const niche = form.niche.trim() || null;
@@ -622,6 +626,7 @@ export default function Leads() {
         business_name,
         owner_name,
         phone,
+        alt_phone,
         email,
         niche,
         demo_url,
@@ -702,7 +707,7 @@ export default function Leads() {
           const business_name = (row[columnMapping.business_name] ?? "").trim();
           const owner_name = columnMapping.owner_name ? (row[columnMapping.owner_name] ?? "").trim() : "";
           const rawPhone = columnMapping.phone ? (row[columnMapping.phone] ?? "").trim() : "";
-          const phone = normalizePhoneNumber(rawPhone);
+          const { phone, altPhone } = parseAndFormatPhones(rawPhone);
           const nicheFromFile = columnMapping.niche ? (row[columnMapping.niche] ?? "").trim().toLowerCase() : "";
           const nicheRaw = nicheFromFile || importDefaultNiche;
           const niche = (NICHES as unknown as string[]).includes(nicheRaw) ? nicheRaw : nicheRaw ? "other" : importDefaultNiche;
@@ -713,6 +718,7 @@ export default function Leads() {
             business_name,
             owner_name,
             phone,
+            alt_phone: altPhone,
             niche,
             notes,
           };
@@ -801,6 +807,7 @@ export default function Leads() {
           business_name: r.business_name,
           owner_name: r.owner_name || null,
           phone: r.phone || null,
+          alt_phone: r.alt_phone || null,
           niche: r.niche || "electrical",
           notes: r.notes || null,
           stage: "new",
@@ -1050,7 +1057,9 @@ export default function Leads() {
               {filtered.map((lead) => {
             const stage = (lead.stage ?? "new").toLowerCase();
             const phone = lead.phone ? normalizePhoneNumber(lead.phone) : "";
+            const altPhone = lead.alt_phone ? normalizePhoneNumber(lead.alt_phone) : "";
             const wa = phone ? `https://wa.me/${phone}` : null;
+            const waAlt = altPhone ? `https://wa.me/${altPhone}` : null;
             const notContacted = !lead.last_contact_at;
                 const saving = savingLeadId === lead.id;
                 const due = isFollowUpDue(lead, saToday);
@@ -1125,6 +1134,18 @@ export default function Leads() {
                       No phone
                     </div>
                   )}
+                  {waAlt ? (
+                    <a
+                      href={waAlt}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+                      title="Alternative number"
+                    >
+                      <Phone className="h-4 w-4 opacity-60" />
+                      <span className="truncate">{altPhone}</span>
+                    </a>
+                  ) : null}
                   {lead.demo_url ? (
                     <a
                       href={lead.demo_url}

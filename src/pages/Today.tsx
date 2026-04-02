@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatZAPhone } from "@/lib/phone";
 import { AlertTriangle, Check, Clipboard, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -75,9 +76,6 @@ function openerText(business: string, owner: string | null) {
   return who ? `Hi, is this ${who} from ${business}?` : `Hi, is this the owner of ${business}?`;
 }
 
-function normalizePhoneNumber(raw: string) {
-  return raw.replace(/[^0-9]/g, "");
-}
 
 function snapshotCheckin(c: DailyCheckinRow) {
   return JSON.stringify({
@@ -496,7 +494,7 @@ export default function Today() {
         ) : (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {newLeads.map((l) => {
-              const phone = l.phone ? normalizePhoneNumber(l.phone) : "";
+              const phone = l.phone ? formatZAPhone(l.phone) : "";
               const wa = phone ? `https://wa.me/${phone}` : null;
               const msg = openerText(l.business_name, l.owner_name);
               const copied = copiedNewLeadId === l.id;

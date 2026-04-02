@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatZAPhone } from "@/lib/phone";
 import { ExternalLink, Mail, Phone, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ type LeadRow = {
   business_name: string;
   owner_name: string | null;
   phone: string | null;
+  alt_phone: string | null;
   email: string | null;
   niche: string | null;
   demo_url: string | null;
@@ -16,9 +18,6 @@ type LeadRow = {
   is_client: boolean | null;
 };
 
-function normalizePhoneNumber(raw: string) {
-  return raw.replace(/[^0-9]/g, "");
-}
 
 export default function Clients() {
   const { pushToast } = useToast();
@@ -91,7 +90,7 @@ export default function Clients() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {clients.map((c) => {
-            const phone = c.phone ? normalizePhoneNumber(c.phone) : "";
+            const phone = c.phone ? formatZAPhone(c.phone) : "";
             const wa = phone ? `https://wa.me/${phone}` : null;
             return (
               <div key={c.id} className="rounded-2xl border border-border bg-panel p-4">
