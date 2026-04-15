@@ -56,9 +56,7 @@ function followUpLabel(t: string | null) {
 
 type DrawerTab = "details" | "messages";
 
-type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "other";
-
-const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "other"];
+const NICHES = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "nail salon", "other"] as const;
 
 type LeadLanguage = "english" | "afrikaans";
 
@@ -91,7 +89,7 @@ export default function LeadDetailsDrawer({
   const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [languageValue, setLanguageValue] = useState<LeadLanguage>("english");
   const [savingLanguage, setSavingLanguage] = useState(false);
-  const [nicheValue, setNicheValue] = useState<NicheOption>("electrical");
+  const [nicheValue, setNicheValue] = useState<string>("electrical");
   const [savingNiche, setSavingNiche] = useState(false);
   const [notesValue, setNotesValue] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -133,8 +131,7 @@ export default function LeadDetailsDrawer({
         setNewDirection("sent");
         setTab(initialTab);
         setFollowUpDate(lead.follow_up_due ?? "");
-        const raw = (lead.niche ?? "electrical").toLowerCase();
-        setNicheValue((NICHES as unknown as string[]).includes(raw) ? (raw as NicheOption) : "other");
+        setNicheValue((lead.niche ?? "electrical").toLowerCase());
         setNotesValue((lead.notes ?? "").trim());
         if (languageEnabled) {
           const langRaw = (lead.language ?? "english").toLowerCase();
@@ -210,7 +207,7 @@ export default function LeadDetailsDrawer({
     }
   }
 
-  async function saveNiche(next: NicheOption) {
+  async function saveNiche(next: string) {
     if (!lead) return;
     setSavingNiche(true);
     try {
@@ -609,17 +606,17 @@ export default function LeadDetailsDrawer({
                         <select
                           value={nicheValue}
                           onChange={(e) => {
-                            const next = e.target.value as NicheOption;
-                            setNicheValue(next);
-                            void saveNiche(next);
+                            setNicheValue(e.target.value);
+                            void saveNiche(e.target.value);
                           }}
                           className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
                         >
                           {NICHES.map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
+                            <option key={n} value={n}>{n}</option>
                           ))}
+                          {!NICHES.includes(nicheValue as typeof NICHES[number]) && nicheValue ? (
+                            <option value={nicheValue}>{nicheValue}</option>
+                          ) : null}
                         </select>
                         {savingNiche ? <div className="text-xs text-zinc-400">Saving…</div> : null}
                       </div>
