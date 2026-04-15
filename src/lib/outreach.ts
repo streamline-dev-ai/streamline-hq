@@ -24,7 +24,12 @@ export type OutreachTemplateKey =
   | "salon_replied"
   | "salon_demo_offer_accepted"
   | "salon_someone_building"
-  | "salon_not_interested";
+  | "salon_not_interested"
+  | "nail_salon_messaged"
+  | "nail_salon_replied"
+  | "nail_salon_demo_offer_accepted"
+  | "nail_salon_someone_building"
+  | "nail_salon_not_interested";
 
 export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
   // ── Opening messages ────────────────────────────────────────────────────────
@@ -71,6 +76,18 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
   salon_not_interested:
     "No problem at all.\n\nI'll keep your details and if you ever change your mind, just let me know. Wish you all the best! 🙏",
 
+  // ── Nail salon-specific ──────────────────────────────────────────────────
+  nail_salon_messaged:
+    "Hi! I heard from a friend that you do really great nails — and I noticed you don't have a website yet.\n\nI'm a web designer who works with nail salons. Any particular reason, or are you already working on one?",
+  nail_salon_replied:
+    "A website makes a real difference for nail salons — clients can book online any time of day, you can sell your products directly instead of only relying on Instagram, and it just makes the business look way more professional.\n\nWould you want me to put together a free demo so you can actually see what it could look like for {business_name}? Zero obligation.",
+  nail_salon_demo_offer_accepted:
+    "Great! I'll put something together based on your services and style.\n\nWhat's the best email to send it to?",
+  nail_salon_someone_building:
+    "Oh nice!\n\nIf things take longer than expected or you want to compare options, feel free to reach out. Happy to help 😊",
+  nail_salon_not_interested:
+    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just shout. All the best with the salon! 🙏",
+
   // ── Restaurant-specific ──────────────────────────────────────────────────
   restaurant_messaged:
     "Hi! I actually ate at your restaurant recently — the food was excellent. Afterwards I wanted to recommend it to friends and noticed you don't have a website yet.\nI'm a web designer who specialises in restaurants. Just curious — is there a reason you haven't got one, or are you already working on it?",
@@ -105,6 +122,11 @@ export const OUTREACH_TEMPLATE_META: Array<{ key: OutreachTemplateKey; label: st
   { key: "salon_demo_offer_accepted", label: "💇 Salon — they want a demo (ask for email)" },
   { key: "salon_someone_building", label: "💇 Salon — someone's already building their site" },
   { key: "salon_not_interested", label: "💇 Salon — not interested right now" },
+  { key: "nail_salon_messaged", label: "💅 Nail salon — 2nd message" },
+  { key: "nail_salon_replied", label: "💅 Nail salon — after reply (benefits + demo offer)" },
+  { key: "nail_salon_demo_offer_accepted", label: "💅 Nail salon — they want a demo (ask for email)" },
+  { key: "nail_salon_someone_building", label: "💅 Nail salon — someone's already building their site" },
+  { key: "nail_salon_not_interested", label: "💅 Nail salon — not interested right now" },
 ];
 
 export type OutreachLead = {
@@ -213,6 +235,19 @@ export function getOutreachMessage(lead: OutreachLead) {
     }
     if (stage === "replied") {
       return applyVars(templates.salon_replied, vars).trim();
+    }
+  }
+
+  if (niche === "nail salon") {
+    if (stage === "new") {
+      const tpl = hasName(owner_name) ? templates.new_english_has_name : templates.new_english_no_name;
+      return applyVars(tpl, vars).trim();
+    }
+    if (stage === "messaged") {
+      return applyVars(templates.nail_salon_messaged, vars).trim();
+    }
+    if (stage === "replied") {
+      return applyVars(templates.nail_salon_replied, vars).trim();
     }
   }
 
