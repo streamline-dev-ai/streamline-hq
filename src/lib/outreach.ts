@@ -19,7 +19,12 @@ export type OutreachTemplateKey =
   | "restaurant_messaged"
   | "restaurant_replied"
   | "restaurant_someone_building_1"
-  | "restaurant_someone_building_2";
+  | "restaurant_someone_building_2"
+  | "salon_messaged"
+  | "salon_replied"
+  | "salon_demo_offer_accepted"
+  | "salon_someone_building"
+  | "salon_not_interested";
 
 export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
   // ── Opening messages ────────────────────────────────────────────────────────
@@ -54,6 +59,18 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
   follow_up_both:
     "Hi {owner_name}, just following up — happy to answer any questions or tweak the demo if needed. No pressure at all 😊",
 
+  // ── Salon-specific ───────────────────────────────────────────────────────
+  salon_messaged:
+    "Hi! I heard from a friend that {business_name} does really good hair/treatments — and I noticed you don't have a website yet.\n\nI'm a web designer who works with salons. Any particular reason, or are you already working on one?",
+  salon_replied:
+    "A good website really helps salons — clients can book appointments online 24/7, you can sell your products directly, it builds trust, and you get more control instead of relying only on Instagram.\n\nWould you be interested in me quickly building a *free demo website* so you can see how it could look for {business_name}? No obligation at all.",
+  salon_demo_offer_accepted:
+    "Great! I'll put together a quick demo based on {business_name}.\n\nWhat's the best email to send it to?",
+  salon_someone_building:
+    "Oh nice!\n\nIf it takes longer than expected or you want a second option later, feel free to reach out. Happy to help 😊",
+  salon_not_interested:
+    "No problem at all.\n\nI'll keep your details and if you ever change your mind, just let me know. Wish you all the best! 🙏",
+
   // ── Restaurant-specific ──────────────────────────────────────────────────
   restaurant_messaged:
     "Hi! I actually ate at your restaurant recently — the food was excellent. Afterwards I wanted to recommend it to friends and noticed you don't have a website yet.\nI'm a web designer who specialises in restaurants. Just curious — is there a reason you haven't got one, or are you already working on it?",
@@ -83,6 +100,11 @@ export const OUTREACH_TEMPLATE_META: Array<{ key: OutreachTemplateKey; label: st
   { key: "restaurant_replied", label: "🍽️ Restaurant — after reply" },
   { key: "restaurant_someone_building_1", label: "🍽️ Restaurant — someone's building their site (v1)" },
   { key: "restaurant_someone_building_2", label: "🍽️ Restaurant — someone's building their site (v2)" },
+  { key: "salon_messaged", label: "💇 Salon — 2nd message" },
+  { key: "salon_replied", label: "💇 Salon — after reply (benefits + demo offer)" },
+  { key: "salon_demo_offer_accepted", label: "💇 Salon — they want a demo (ask for email)" },
+  { key: "salon_someone_building", label: "💇 Salon — someone's already building their site" },
+  { key: "salon_not_interested", label: "💇 Salon — not interested right now" },
 ];
 
 export type OutreachLead = {
@@ -178,6 +200,19 @@ export function getOutreachMessage(lead: OutreachLead) {
     }
     if (stage === "replied") {
       return applyVars(templates.restaurant_replied, vars).trim();
+    }
+  }
+
+  if (niche === "salon") {
+    if (stage === "new") {
+      const tpl = hasName(owner_name) ? templates.new_english_has_name : templates.new_english_no_name;
+      return applyVars(tpl, vars).trim();
+    }
+    if (stage === "messaged") {
+      return applyVars(templates.salon_messaged, vars).trim();
+    }
+    if (stage === "replied") {
+      return applyVars(templates.salon_replied, vars).trim();
     }
   }
 

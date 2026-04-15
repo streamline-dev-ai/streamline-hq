@@ -20,9 +20,9 @@ import {
 
 type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost" | "no_whatsapp" | "needs_attention";
 
-type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "other";
+type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "salon" | "other";
 
-const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "other"];
+const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "other"];
 
 type LeadLanguage = "english" | "afrikaans";
 
@@ -276,7 +276,8 @@ export default function Leads() {
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({
     business_name: "", owner_name: "", phone: "", email: "", niche: "", notes: "",
   });
-  const [importDefaultNiche, setImportDefaultNiche] = useState<NicheOption>("restaurant");
+  const [importDefaultNiche, setImportDefaultNiche] = useState<string>("restaurant");
+  const [importCustomNiche, setImportCustomNiche] = useState("");
   const [importPreview, setImportPreview] = useState<
     Array<{
       id: string;
@@ -708,9 +709,11 @@ export default function Leads() {
           const owner_name = columnMapping.owner_name ? (row[columnMapping.owner_name] ?? "").trim() : "";
           const rawPhone = columnMapping.phone ? (row[columnMapping.phone] ?? "").trim() : "";
           const { phone, altPhone } = parseAndFormatPhones(rawPhone);
+          const effectiveDefaultNiche = importDefaultNiche === "__custom__" ? (importCustomNiche.trim() || "other") : importDefaultNiche;
           const nicheFromFile = columnMapping.niche ? (row[columnMapping.niche] ?? "").trim().toLowerCase() : "";
-          const nicheRaw = nicheFromFile || importDefaultNiche;
-          const niche = (NICHES as unknown as string[]).includes(nicheRaw) ? nicheRaw : nicheRaw ? "other" : importDefaultNiche;
+          const niche = nicheFromFile
+            ? ((NICHES as unknown as string[]).includes(nicheFromFile) ? nicheFromFile : "other")
+            : effectiveDefaultNiche;
           const notes = columnMapping.notes ? (row[columnMapping.notes] ?? "").trim() : "";
           return {
             id: `${idx}-${crypto.randomUUID()}`,
@@ -1520,15 +1523,28 @@ export default function Leads() {
                   <div className="w-28 shrink-0 text-sm text-zinc-300">Default niche</div>
                   <select
                     value={importDefaultNiche}
-                    onChange={(e) => setImportDefaultNiche(e.target.value as NicheOption)}
+                    onChange={(e) => setImportDefaultNiche(e.target.value)}
                     className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
                   >
                     {NICHES.map((n) => (
                       <option key={n} value={n}>{n}</option>
                     ))}
+                    <option value="__custom__">Custom…</option>
                   </select>
                   <div className="text-xs text-zinc-500">Used when niche column is empty or not mapped</div>
                 </div>
+                {importDefaultNiche === "__custom__" && (
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="w-28 shrink-0 text-sm text-zinc-300">Custom niche</div>
+                    <input
+                      type="text"
+                      value={importCustomNiche}
+                      onChange={(e) => setImportCustomNiche(e.target.value)}
+                      placeholder="e.g. landscaping"
+                      className="min-w-0 flex-1 rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
