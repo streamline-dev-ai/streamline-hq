@@ -29,7 +29,17 @@ export type OutreachTemplateKey =
   | "nail_salon_replied"
   | "nail_salon_demo_offer_accepted"
   | "nail_salon_someone_building"
-  | "nail_salon_not_interested";
+  | "nail_salon_not_interested"
+  | "beauty_salon_messaged"
+  | "beauty_salon_replied"
+  | "beauty_salon_demo_offer_accepted"
+  | "beauty_salon_someone_building"
+  | "beauty_salon_not_interested"
+  | "salon_messaged_broken_site"
+  | "nail_salon_messaged_broken_site"
+  | "beauty_salon_messaged_broken_site"
+  | "messaged_english_has_name_broken_site"
+  | "messaged_english_no_name_broken_site";
 
 export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
   // ── Opening messages ────────────────────────────────────────────────────────
@@ -88,6 +98,30 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
   nail_salon_not_interested:
     "No problem at all.\n\nI'll keep your details — if you ever change your mind, just shout. All the best with the salon! 🙏",
 
+  // ── Beauty salon-specific ────────────────────────────────────────────────
+  beauty_salon_messaged:
+    "Hi! I heard from a friend that you do really good facials and treatments — and I noticed you don't have a website yet.\n\nI'm a web designer who works with beauty salons. Any particular reason, or are you already working on one?",
+  beauty_salon_replied:
+    "A website makes a real difference for beauty salons — clients can book appointments online 24/7, you can promote your packages and specials, sell retail products directly, and it builds serious trust before clients even walk in.\n\nWould you want me to put together a free demo so you can actually see how premium it could look for {business_name}? Zero obligation.",
+  beauty_salon_demo_offer_accepted:
+    "Great! I'll put something together based on your treatments and style.\n\nWhat's the best email to send it to?",
+  beauty_salon_someone_building:
+    "Oh nice!\n\nIf it takes longer than expected or you want a second opinion, feel free to reach out. Happy to help 😊",
+  beauty_salon_not_interested:
+    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just shout. All the best with the salon! 🙏",
+
+  // ── Broken site variants (messaged stage) ────────────────────────────────
+  messaged_english_has_name_broken_site:
+    "Hi {owner_name}! Christiaan here — found {business_name} on Google, great reviews. Noticed your website seems to be down — is that something you're getting sorted, or are you looking for something new?",
+  messaged_english_no_name_broken_site:
+    "Hi! Christiaan here — found {business_name} on Google, great reviews. Noticed your website seems to be down — is that something you're getting sorted, or are you looking for something new?",
+  salon_messaged_broken_site:
+    "Hi! I heard from a friend that {business_name} does really good hair/treatments — and I noticed your website seems to be down.\n\nI'm a web designer who works with salons. Is it something you're getting fixed, or are you looking to start fresh?",
+  nail_salon_messaged_broken_site:
+    "Hi! I heard from a friend that you do really great nails — and I noticed your website seems to be down.\n\nI'm a web designer who works with nail salons. Is it something you're getting fixed, or are you looking for something new?",
+  beauty_salon_messaged_broken_site:
+    "Hi! I heard from a friend that you do really good facials and treatments — and I noticed your website seems to be down.\n\nI'm a web designer who works with beauty salons. Is it something you're getting fixed, or are you looking to start fresh?",
+
   // ── Restaurant-specific ──────────────────────────────────────────────────
   restaurant_messaged:
     "Hi! I actually ate at your restaurant recently — the food was excellent. Afterwards I wanted to recommend it to friends and noticed you don't have a website yet.\nI'm a web designer who specialises in restaurants. Just curious — is there a reason you haven't got one, or are you already working on it?",
@@ -127,6 +161,16 @@ export const OUTREACH_TEMPLATE_META: Array<{ key: OutreachTemplateKey; label: st
   { key: "nail_salon_demo_offer_accepted", label: "💅 Nail salon — they want a demo (ask for email)" },
   { key: "nail_salon_someone_building", label: "💅 Nail salon — someone's already building their site" },
   { key: "nail_salon_not_interested", label: "💅 Nail salon — not interested right now" },
+  { key: "beauty_salon_messaged", label: "🧖 Beauty salon — 2nd message" },
+  { key: "beauty_salon_replied", label: "🧖 Beauty salon — after reply (benefits + demo offer)" },
+  { key: "beauty_salon_demo_offer_accepted", label: "🧖 Beauty salon — they want a demo (ask for email)" },
+  { key: "beauty_salon_someone_building", label: "🧖 Beauty salon — someone's already building their site" },
+  { key: "beauty_salon_not_interested", label: "🧖 Beauty salon — not interested right now" },
+  { key: "messaged_english_has_name_broken_site", label: "🔧 Broken site — 2nd message English (has name)" },
+  { key: "messaged_english_no_name_broken_site", label: "🔧 Broken site — 2nd message English (no name)" },
+  { key: "salon_messaged_broken_site", label: "🔧 Broken site — Salon 2nd message" },
+  { key: "nail_salon_messaged_broken_site", label: "🔧 Broken site — Nail salon 2nd message" },
+  { key: "beauty_salon_messaged_broken_site", label: "🔧 Broken site — Beauty salon 2nd message" },
 ];
 
 export type OutreachLead = {
@@ -137,6 +181,7 @@ export type OutreachLead = {
   niche: string | null;
   demo_url?: string | null;
   last_contact_at?: string | null;
+  broken_site?: boolean | null;
 };
 
 const STORAGE_KEY = "streamline-hq:outreach-templates:v1";
@@ -231,7 +276,8 @@ export function getOutreachMessage(lead: OutreachLead) {
       return applyVars(tpl, vars).trim();
     }
     if (stage === "messaged") {
-      return applyVars(templates.salon_messaged, vars).trim();
+      const tpl = lead.broken_site ? templates.salon_messaged_broken_site : templates.salon_messaged;
+      return applyVars(tpl, vars).trim();
     }
     if (stage === "replied") {
       return applyVars(templates.salon_replied, vars).trim();
@@ -244,10 +290,25 @@ export function getOutreachMessage(lead: OutreachLead) {
       return applyVars(tpl, vars).trim();
     }
     if (stage === "messaged") {
-      return applyVars(templates.nail_salon_messaged, vars).trim();
+      const tpl = lead.broken_site ? templates.nail_salon_messaged_broken_site : templates.nail_salon_messaged;
+      return applyVars(tpl, vars).trim();
     }
     if (stage === "replied") {
       return applyVars(templates.nail_salon_replied, vars).trim();
+    }
+  }
+
+  if (niche === "beauty salon") {
+    if (stage === "new") {
+      const tpl = hasName(owner_name) ? templates.new_english_has_name : templates.new_english_no_name;
+      return applyVars(tpl, vars).trim();
+    }
+    if (stage === "messaged") {
+      const tpl = lead.broken_site ? templates.beauty_salon_messaged_broken_site : templates.beauty_salon_messaged;
+      return applyVars(tpl, vars).trim();
+    }
+    if (stage === "replied") {
+      return applyVars(templates.beauty_salon_replied, vars).trim();
     }
   }
 
@@ -269,9 +330,13 @@ export function getOutreachMessage(lead: OutreachLead) {
         ? hasName(owner_name)
           ? templates.messaged_afrikaans_has_name
           : templates.messaged_afrikaans_no_name
-        : hasName(owner_name)
-          ? templates.messaged_english_has_name
-          : templates.messaged_english_no_name;
+        : lead.broken_site
+          ? hasName(owner_name)
+            ? templates.messaged_english_has_name_broken_site
+            : templates.messaged_english_no_name_broken_site
+          : hasName(owner_name)
+            ? templates.messaged_english_has_name
+            : templates.messaged_english_no_name;
     return applyVars(tpl, vars).trim();
   }
 

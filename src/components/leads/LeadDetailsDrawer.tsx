@@ -23,6 +23,7 @@ type LeadRow = {
   last_contact_at: string | null;
   demo_url: string | null;
   notes: string | null;
+  broken_site: boolean | null;
 };
 
 type OutreachMessageRow = {
@@ -56,7 +57,7 @@ function followUpLabel(t: string | null) {
 
 type DrawerTab = "details" | "messages";
 
-const NICHES = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "nail salon", "other"] as const;
+const NICHES = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "nail salon", "beauty salon", "other"] as const;
 
 type LeadLanguage = "english" | "afrikaans";
 
@@ -91,6 +92,8 @@ export default function LeadDetailsDrawer({
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [nicheValue, setNicheValue] = useState<string>("electrical");
   const [savingNiche, setSavingNiche] = useState(false);
+  const [brokenSite, setBrokenSite] = useState(false);
+  const [savingBrokenSite, setSavingBrokenSite] = useState(false);
   const [notesValue, setNotesValue] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -132,6 +135,7 @@ export default function LeadDetailsDrawer({
         setTab(initialTab);
         setFollowUpDate(lead.follow_up_due ?? "");
         setNicheValue((lead.niche ?? "electrical").toLowerCase());
+        setBrokenSite(lead.broken_site === true);
         setNotesValue((lead.notes ?? "").trim());
         if (languageEnabled) {
           const langRaw = (lead.language ?? "english").toLowerCase();
@@ -219,6 +223,20 @@ export default function LeadDetailsDrawer({
       pushToast({ type: "error", title: "Niche", message: msg });
     } finally {
       setSavingNiche(false);
+    }
+  }
+
+  async function saveBrokenSite(next: boolean) {
+    if (!lead) return;
+    setSavingBrokenSite(true);
+    try {
+      const r = await supabase.from("leads").update({ broken_site: next }).eq("id", lead.id);
+      if (r.error) throw r.error;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to update";
+      pushToast({ type: "error", title: "Broken site", message: msg });
+    } finally {
+      setSavingBrokenSite(false);
     }
   }
 
@@ -621,6 +639,26 @@ export default function LeadDetailsDrawer({
                         {savingNiche ? <div className="text-xs text-zinc-400">Saving…</div> : null}
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      disabled={savingBrokenSite}
+                      onClick={() => {
+                        const next = !brokenSite;
+                        setBrokenSite(next);
+                        void saveBrokenSite(next);
+                      }}
+                      className={cn(
+                        "flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-semibold",
+                        brokenSite
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                          : "border-border bg-panel text-zinc-100 hover:bg-white/5",
+                        savingBrokenSite && "opacity-60",
+                      )}
+                    >
+                      <span>{brokenSite ? "Has broken site ✓" : "Has broken site"}</span>
+                      <span className="text-xs text-zinc-500 font-normal ml-2">changes msg 2</span>
+                    </button>
+
                     <div className="flex items-center justify-between rounded-xl border border-border bg-panel px-3 py-2">
                       <span className="text-zinc-400">Last contacted</span>
                       <span className="font-semibold text-zinc-100">

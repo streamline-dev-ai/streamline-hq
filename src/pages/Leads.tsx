@@ -20,9 +20,9 @@ import {
 
 type LeadStage = "new" | "messaged" | "replied" | "demo_sent" | "proposal_sent" | "closed" | "lost" | "no_whatsapp" | "needs_attention";
 
-type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "salon" | "nail salon" | "other";
+type NicheOption = "electrical" | "plumbing" | "pest control" | "solar" | "aircon" | "handyman" | "restaurant" | "salon" | "nail salon" | "beauty salon" | "other";
 
-const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "nail salon", "other"];
+const NICHES: NicheOption[] = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "nail salon", "beauty salon", "other"];
 
 type LeadLanguage = "english" | "afrikaans";
 
@@ -43,6 +43,7 @@ type LeadRow = {
   demo_url: string | null;
   notes: string | null;
   opener_used: string | null;
+  broken_site: boolean | null;
   created_at?: string | null;
 };
 
@@ -1176,6 +1177,7 @@ export default function Leads() {
                         niche: lead.niche,
                         demo_url: lead.demo_url,
                         last_contact_at: lead.last_contact_at,
+                        broken_site: lead.broken_site,
                       });
                       await navigator.clipboard.writeText(msg);
                       setCopiedOutreachLeadId(lead.id);
