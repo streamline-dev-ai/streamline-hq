@@ -38,6 +38,12 @@ export type OutreachTemplateKey =
   | "salon_messaged_broken_site"
   | "nail_salon_messaged_broken_site"
   | "beauty_salon_messaged_broken_site"
+  | "nail_beauty_salon_messaged"
+  | "nail_beauty_salon_replied"
+  | "nail_beauty_salon_demo_offer_accepted"
+  | "nail_beauty_salon_someone_building"
+  | "nail_beauty_salon_not_interested"
+  | "nail_beauty_salon_messaged_broken_site"
   | "messaged_english_has_name_broken_site"
   | "messaged_english_no_name_broken_site";
 
@@ -76,39 +82,54 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
 
   // ── Salon-specific ───────────────────────────────────────────────────────
   salon_messaged:
-    "Hi! I heard from a friend that {business_name} does really good hair/treatments — and I noticed you don't have a website yet.\n\nI'm a web designer who works with salons. Any particular reason, or are you already working on one?",
+    "Hi! I heard {business_name} does really good hair and treatments — and noticed you don't have a website yet.\n\nI'm a web designer who works with salons. Any particular reason, or are you already working on one?",
   salon_replied:
-    "A good website really helps salons — clients can book appointments online 24/7, you can sell your products directly, it builds trust, and you get more control instead of relying only on Instagram.\n\nWould you be interested in me quickly building a *free demo website* so you can see how it could look for {business_name}? No obligation at all.",
+    "A good website helps a lot — clients can book online 24/7, you can sell products directly, promote specials, and it builds real trust with new clients.\n\nWould you be keen for me to build a *free demo* so you can see how it could look? No obligation.",
   salon_demo_offer_accepted:
-    "Great! I'll put together a quick demo based on {business_name}.\n\nWhat's the best email to send it to?",
+    "Great! I'll put a quick demo together for {business_name}.\n\nWhat's the best email to send it to?",
   salon_someone_building:
-    "Oh nice!\n\nIf it takes longer than expected or you want a second option later, feel free to reach out. Happy to help 😊",
+    "Oh nice!\n\nIf it takes longer than expected or you want a second option, feel free to reach out. Happy to help 😊",
   salon_not_interested:
-    "No problem at all.\n\nI'll keep your details and if you ever change your mind, just let me know. Wish you all the best! 🙏",
+    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just let me know. All the best! 🙏",
 
   // ── Nail salon-specific ──────────────────────────────────────────────────
   nail_salon_messaged:
-    "Hi! I heard from a friend that you do really great nails — and I noticed you don't have a website yet.\n\nI'm a web designer who works with nail salons. Any particular reason, or are you already working on one?",
+    "Hi! I heard you do really great nails — and noticed you don't have a website yet.\n\nI'm a web designer who works with nail salons. Any particular reason, or are you already working on one?",
   nail_salon_replied:
-    "A website makes a real difference for nail salons — clients can book online any time of day, you can sell your products directly instead of only relying on Instagram, and it just makes the business look way more professional.\n\nWould you want me to put together a free demo so you can actually see what it could look like for {business_name}? Zero obligation.",
+    "A website makes a real difference — clients can book online any time, you can sell products directly, and it makes the business look way more professional.\n\nWould you want me to build a *free demo* so you can see what it could look like for {business_name}? Zero obligation.",
   nail_salon_demo_offer_accepted:
     "Great! I'll put something together based on your services and style.\n\nWhat's the best email to send it to?",
   nail_salon_someone_building:
     "Oh nice!\n\nIf things take longer than expected or you want to compare options, feel free to reach out. Happy to help 😊",
   nail_salon_not_interested:
-    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just shout. All the best with the salon! 🙏",
+    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just shout. All the best! 🙏",
 
   // ── Beauty salon-specific ────────────────────────────────────────────────
   beauty_salon_messaged:
-    "Hi! I heard from a friend that you do really good facials and treatments — and I noticed you don't have a website yet.\n\nI'm a web designer who works with beauty salons. Any particular reason, or are you already working on one?",
+    "Hi! I heard you do really good facials and treatments — and noticed you don't have a website yet.\n\nI'm a web designer who works with beauty salons. Any particular reason, or are you already working on one?",
   beauty_salon_replied:
-    "A website makes a real difference for beauty salons — clients can book appointments online 24/7, you can promote your packages and specials, sell retail products directly, and it builds serious trust before clients even walk in.\n\nWould you want me to put together a free demo so you can actually see how premium it could look for {business_name}? Zero obligation.",
+    "A website makes a big difference — clients can book online 24/7, you can promote packages and specials, sell retail directly, and it builds real trust before they even walk in.\n\nWould you want me to build a *free demo* so you can see how it could look for {business_name}? Zero obligation.",
   beauty_salon_demo_offer_accepted:
     "Great! I'll put something together based on your treatments and style.\n\nWhat's the best email to send it to?",
   beauty_salon_someone_building:
-    "Oh nice!\n\nIf it takes longer than expected or you want a second opinion, feel free to reach out. Happy to help 😊",
+    "Oh nice!\n\nIf it takes longer than expected or you want a second option, feel free to reach out. Happy to help 😊",
   beauty_salon_not_interested:
-    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just shout. All the best with the salon! 🙏",
+    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just shout. All the best! 🙏",
+
+  // ── Nail & beauty salon-specific ────────────────────────────────────────
+  nail_beauty_salon_messaged:
+    "Hi! I heard you do really nice nails, toes and facials — and noticed you don't have a website yet.\n\nI'm a web designer who works with nail and beauty salons. Any particular reason, or are you already working on one?",
+  nail_beauty_salon_replied:
+    "A website would help your salon a lot — clients can book appointments for nails or facials online 24/7, you can sell products and skincare retail, promote specials, and it builds real trust with new clients.\n\nWould you want me to build a *free demo* so you can see exactly how it could look for {business_name}? No obligation at all.",
+  nail_beauty_salon_demo_offer_accepted:
+    "Great! I'll create a quick demo based on your nails, toes, facials and other treatments.\n\nWhat's the best email to send it to?",
+  nail_beauty_salon_someone_building:
+    "Oh nice!\n\nIf it takes longer than expected or you want a second option, feel free to reach out. Happy to help 😊",
+  nail_beauty_salon_not_interested:
+    "No problem at all.\n\nI'll keep your details — if you ever change your mind, just let me know. All the best with the salon! 🙏",
+
+  nail_beauty_salon_messaged_broken_site:
+    "Hi! I heard you do really nice nails, toes and facials — and noticed your website seems to be down.\n\nI'm a web designer who works with nail and beauty salons. Is it something you're getting fixed, or are you looking to start fresh?",
 
   // ── Broken site variants (messaged stage) ────────────────────────────────
   messaged_english_has_name_broken_site:
@@ -166,11 +187,17 @@ export const OUTREACH_TEMPLATE_META: Array<{ key: OutreachTemplateKey; label: st
   { key: "beauty_salon_demo_offer_accepted", label: "🧖 Beauty salon — they want a demo (ask for email)" },
   { key: "beauty_salon_someone_building", label: "🧖 Beauty salon — someone's already building their site" },
   { key: "beauty_salon_not_interested", label: "🧖 Beauty salon — not interested right now" },
+  { key: "nail_beauty_salon_messaged", label: "💅🧖 Nail & beauty — 2nd message" },
+  { key: "nail_beauty_salon_replied", label: "💅🧖 Nail & beauty — after reply (benefits + demo offer)" },
+  { key: "nail_beauty_salon_demo_offer_accepted", label: "💅🧖 Nail & beauty — they want a demo (ask for email)" },
+  { key: "nail_beauty_salon_someone_building", label: "💅🧖 Nail & beauty — someone's already building their site" },
+  { key: "nail_beauty_salon_not_interested", label: "💅🧖 Nail & beauty — not interested right now" },
   { key: "messaged_english_has_name_broken_site", label: "🔧 Broken site — 2nd message English (has name)" },
   { key: "messaged_english_no_name_broken_site", label: "🔧 Broken site — 2nd message English (no name)" },
   { key: "salon_messaged_broken_site", label: "🔧 Broken site — Salon 2nd message" },
   { key: "nail_salon_messaged_broken_site", label: "🔧 Broken site — Nail salon 2nd message" },
   { key: "beauty_salon_messaged_broken_site", label: "🔧 Broken site — Beauty salon 2nd message" },
+  { key: "nail_beauty_salon_messaged_broken_site", label: "🔧 Broken site — Nail & beauty salon 2nd message" },
 ];
 
 export type OutreachLead = {
@@ -309,6 +336,20 @@ export function getOutreachMessage(lead: OutreachLead) {
     }
     if (stage === "replied") {
       return applyVars(templates.beauty_salon_replied, vars).trim();
+    }
+  }
+
+  if (niche === "nail & beauty salon") {
+    if (stage === "new") {
+      const tpl = hasName(owner_name) ? templates.new_english_has_name : templates.new_english_no_name;
+      return applyVars(tpl, vars).trim();
+    }
+    if (stage === "messaged") {
+      const tpl = lead.broken_site ? templates.nail_beauty_salon_messaged_broken_site : templates.nail_beauty_salon_messaged;
+      return applyVars(tpl, vars).trim();
+    }
+    if (stage === "replied") {
+      return applyVars(templates.nail_beauty_salon_replied, vars).trim();
     }
   }
 

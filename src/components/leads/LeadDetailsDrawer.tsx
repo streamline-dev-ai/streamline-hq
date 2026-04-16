@@ -57,7 +57,7 @@ function followUpLabel(t: string | null) {
 
 type DrawerTab = "details" | "messages";
 
-const NICHES = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "nail salon", "beauty salon", "other"] as const;
+const NICHES = ["electrical", "plumbing", "pest control", "solar", "aircon", "handyman", "restaurant", "salon", "nail salon", "beauty salon", "nail & beauty salon", "other"] as const;
 
 type LeadLanguage = "english" | "afrikaans";
 
