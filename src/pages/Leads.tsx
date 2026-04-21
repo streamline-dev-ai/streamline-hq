@@ -271,6 +271,12 @@ export default function Leads() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [templatesDraft, setTemplatesDraft] = useState<Record<OutreachTemplateKey, string>>(() => loadOutreachTemplates());
 
+  const [editingNicheLeadId, setEditingNicheLeadId] = useState<string | null>(null);
+  const [editingNotesLeadId, setEditingNotesLeadId] = useState<string | null>(null);
+  const [addingPhoneLeadId, setAddingPhoneLeadId] = useState<string | null>(null);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [notesInput, setNotesInput] = useState("");
+
   const [importOpen, setImportOpen] = useState(false);
   const [importColumns, setImportColumns] = useState<string[]>([]);
   const [importRawRows, setImportRawRows] = useState<Array<Record<string, string>>>([]);
@@ -286,6 +292,7 @@ export default function Leads() {
       business_name: string;
       owner_name: string;
       phone: string;
+      alt_phone: string;
       niche: string;
       notes: string;
       duplicate: boolean;
@@ -589,6 +596,49 @@ export default function Leads() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to delete lead";
       pushToast({ type: "error", title: "Delete", message: msg });
+    }
+  }
+
+  async function saveNiche(lead: LeadRow, newNiche: string) {
+    const prev = lead.niche;
+    setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, niche: newNiche } : l)).slice().sort(sortLeads));
+    setEditingNicheLeadId(null);
+    try {
+      const res = await supabase.from("leads").update({ niche: newNiche }).eq("id", lead.id);
+      if (res.error) throw res.error;
+    } catch (e) {
+      setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, niche: prev } : l)).slice().sort(sortLeads));
+      pushToast({ type: "error", title: "Update niche", message: e instanceof Error ? e.message : "Failed" });
+    }
+  }
+
+  async function saveNotes(lead: LeadRow, raw: string) {
+    const notes = raw.trim() || null;
+    const prev = lead.notes;
+    setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, notes } : l)).slice().sort(sortLeads));
+    setEditingNotesLeadId(null);
+    try {
+      const res = await supabase.from("leads").update({ notes }).eq("id", lead.id);
+      if (res.error) throw res.error;
+    } catch (e) {
+      setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, notes: prev } : l)).slice().sort(sortLeads));
+      pushToast({ type: "error", title: "Update notes", message: e instanceof Error ? e.message : "Failed" });
+    }
+  }
+
+  async function saveAltPhone(lead: LeadRow, rawPhone: string) {
+    const formatted = formatZAPhone(rawPhone.trim());
+    const alt_phone = formatted || null;
+    const prev = lead.alt_phone;
+    setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, alt_phone } : l)).slice().sort(sortLeads));
+    setAddingPhoneLeadId(null);
+    setPhoneInput("");
+    try {
+      const res = await supabase.from("leads").update({ alt_phone }).eq("id", lead.id);
+      if (res.error) throw res.error;
+    } catch (e) {
+      setLeads((p) => p.map((l) => (l.id === lead.id ? { ...l, alt_phone: prev } : l)).slice().sort(sortLeads));
+      pushToast({ type: "error", title: "Update phone", message: e instanceof Error ? e.message : "Failed" });
     }
   }
 
@@ -1083,11 +1133,29 @@ export default function Leads() {
                   <div className="min-w-0">
                     <div className="truncate text-base font-semibold text-zinc-100">{lead.business_name}</div>
                     {lead.owner_name ? <div className="mt-0.5 truncate text-sm text-zinc-400">{lead.owner_name}</div> : null}
-                        {niche ? (
-                          <div className="mt-1 inline-flex items-center rounded-full border border-border bg-white/5 px-2 py-0.5 text-[11px] text-zinc-300">
-                            {niche}
-                          </div>
-                        ) : null}
+                        {editingNicheLeadId === lead.id ? (
+                          <select
+                            autoFocus
+                            value={lead.niche ?? ""}
+                            onChange={(e) => void saveNiche(lead, e.target.value)}
+                            onBlur={() => setEditingNicheLeadId(null)}
+                            className="mt-1 rounded-lg border border-purple/40 bg-base/40 px-2 py-0.5 text-[11px] text-zinc-100 outline-none"
+                          >
+                            {NICHES.map((n) => (
+                              <option key={n} value={n}>{n}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingNicheLeadId(lead.id)}
+                            className="mt-1 inline-flex items-center gap-0.5 rounded-full border border-border bg-white/5 px-2 py-0.5 text-[11px] text-zinc-300 hover:border-purple/40 hover:text-purple"
+                            title="Click to change niche"
+                          >
+                            {niche ?? "set niche"}
+                            <span className="opacity-40">▾</span>
+                          </button>
+                        )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <button
@@ -1163,7 +1231,65 @@ export default function Leads() {
                   ) : null}
                 </div>
 
-                {lead.notes ? <div className="mt-3 text-sm text-zinc-300">{notesPreview(lead.notes)}</div> : <div className="mt-3 text-sm text-zinc-500">No notes</div>}
+                {addingPhoneLeadId === lead.id ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      autoFocus
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      onBlur={() => {
+                        if (phoneInput.trim()) void saveAltPhone(lead, phoneInput);
+                        else { setAddingPhoneLeadId(null); setPhoneInput(""); }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void saveAltPhone(lead, phoneInput);
+                        if (e.key === "Escape") { setAddingPhoneLeadId(null); setPhoneInput(""); }
+                      }}
+                      placeholder="e.g. 0821234567 or 2782..."
+                      className="min-w-0 flex-1 rounded-xl border border-purple/40 bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setAddingPhoneLeadId(null); setPhoneInput(""); }}
+                      className="shrink-0 rounded-xl border border-border bg-base/40 px-3 py-2 text-xs text-zinc-400 hover:bg-white/5"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : !lead.alt_phone ? (
+                  <button
+                    type="button"
+                    onClick={() => { setAddingPhoneLeadId(lead.id); setPhoneInput(""); }}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-1.5 text-xs text-zinc-500 hover:border-purple/40 hover:text-zinc-300"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add number
+                  </button>
+                ) : null}
+
+                {editingNotesLeadId === lead.id ? (
+                  <textarea
+                    autoFocus
+                    value={notesInput}
+                    onChange={(e) => setNotesInput(e.target.value)}
+                    onBlur={() => void saveNotes(lead, notesInput)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void saveNotes(lead, notesInput);
+                      if (e.key === "Escape") setEditingNotesLeadId(null);
+                    }}
+                    className="mt-3 w-full min-h-[72px] resize-none rounded-xl border border-purple/40 bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setEditingNotesLeadId(lead.id); setNotesInput(lead.notes ?? ""); }}
+                    className="mt-3 w-full text-left text-sm"
+                  >
+                    {lead.notes
+                      ? <span className="text-zinc-300">{notesPreview(lead.notes)}</span>
+                      : <span className="text-zinc-500">No notes — click to add</span>}
+                  </button>
+                )}
 
                 <button
                   type="button"

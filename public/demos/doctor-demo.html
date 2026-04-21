@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Khumalo Family Practice — Vanderbijlpark</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary:     '#1e3a5f',
+            primaryDark: '#132840',
+            primaryLight:'#2a5298',
+            accent:      '#0ea5e9',
+            accentDark:  '#0284c7',
+            green:       '#059669',
+            greenLight:  '#d1fae5',
+            surface:     '#f0f7ff',
+            muted:       '#64748b',
+          },
+          fontFamily: {
+            heading: ['Outfit', 'sans-serif'],
+            body:    ['Inter', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; color: #0f172a; }
+    h1, h2, h3, h4, h5 { font-family: 'Outfit', sans-serif; }
+
+    /* Fade-up animation */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* WhatsApp pulse */
+    .wa-pulse::before {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 9999px;
+      background: #25D366;
+      opacity: 0.4;
+      animation: pulse-ring 2s ease-out infinite;
+    }
+    @keyframes pulse-ring {
+      0%   { transform: scale(1);   opacity: 0.4; }
+      70%  { transform: scale(1.4); opacity: 0;   }
+      100% { transform: scale(1.4); opacity: 0;   }
+    }
+
+    /* Nav scroll shadow */
+    .nav-scrolled { box-shadow: 0 1px 20px rgba(0,0,0,0.08); }
+
+    /* Hero gradient overlay */
+    .hero-overlay {
+      background: linear-gradient(135deg, rgba(30,58,95,0.92) 0%, rgba(14,165,233,0.55) 100%);
+    }
+
+    /* Stats counter */
+    .stat-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(30,58,95,0.15); }
+
+    /* Service card */
+    .service-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .service-card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(30,58,95,0.12); }
+    .service-icon-bg { transition: background 0.3s ease; }
+    .service-card:hover .service-icon-bg { background: #1e3a5f; }
+    .service-card:hover .service-icon-bg svg { stroke: white; }
+
+    /* Team card */
+    .team-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .team-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(30,58,95,0.12); }
+
+    /* Accordion */
+    .faq-content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+    .faq-content.open { max-height: 300px; }
+    .faq-icon { transition: transform 0.3s ease; }
+    .faq-icon.open { transform: rotate(45deg); }
+
+    /* Mobile menu */
+    .mobile-menu {
+      max-height: 0; overflow: hidden;
+      transition: max-height 0.4s ease, opacity 0.3s ease;
+      opacity: 0;
+    }
+    .mobile-menu.open { max-height: 400px; opacity: 1; }
+
+    /* Process line connector */
+    .process-connector {
+      position: absolute; top: 28px; left: calc(50% + 40px);
+      width: calc(100% - 80px); height: 2px;
+      background: linear-gradient(90deg, #0ea5e9, #1e3a5f);
+    }
+
+    /* Testimonial card */
+    .testimonial-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .testimonial-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(30,58,95,0.1); }
+
+    /* Scroll indicator */
+    @keyframes bounce-down {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(8px); }
+    }
+    .scroll-indicator { animation: bounce-down 2s ease-in-out infinite; }
+
+    /* Credential badge */
+    .credential-badge {
+      background: linear-gradient(135deg, #1e3a5f, #2a5298);
+      color: white; border-radius: 8px; padding: 6px 14px;
+      font-size: 12px; font-weight: 600; display: inline-block;
+    }
+
+    /* Input focus */
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 3px rgba(14,165,233,0.15);
+    }
+  </style>
+</head>
+<body class="bg-white">
+
+<script>
+/* ─────────────────────────────────────────
+   CONFIG — swap these values to rebrand for any GP / medical client
+   ───────────────────────────────────────── */
+const CONFIG = {
+  business: {
+    name:      "Khumalo Family Practice",
+    shortName: "Dr. Khumalo",
+    tagline:   "Trusted Healthcare for Every Stage of Life",
+    phone:     "016 932 4477",
+    whatsapp:  "27829324477",
+    email:     "reception@khumalofamilypractice.co.za",
+    address:   "14 Frikkie Meyer Blvd, Vanderbijlpark, 1900",
+    area:      "Vanderbijlpark",
+    mapQuery:  "14+Frikkie+Meyer+Blvd+Vanderbijlpark+1900",
+    hours: {
+      weekdays:  "Mon – Fri: 07:30 – 17:00",
+      saturday:  "Saturday: 08:00 – 12:00",
+      sunday:    "Sunday & Public Holidays: Closed"
+    }
+  },
+  hero: {
+    headline:     "Your Health Deserves Expert, Personal Care",
+    subheadline:  "Comprehensive family medicine for Vanderbijlpark and the Vaal Triangle — from newborns to seniors.",
+    cta_primary:  "Book an Appointment",
+    cta_secondary:"Our Services"
+  },
+  doctor: {
+    name:        "Dr. Sipho Khumalo",
+    credentials: "MBChB (Wits), FCFP(SA)",
+    title:       "Principal General Practitioner",
+    bio:         "Dr. Sipho Khumalo graduated from the University of the Witwatersrand in 2008 and went on to complete his Fellowship in Family Medicine. After years in public health in Soweto and Sebokeng, he returned to the Vaal Triangle to open a private practice close to home. His approach is straightforward: listen properly, explain clearly, treat effectively. Over 15 years later, he still takes every patient call personally.",
+    image:       "https://picsum.photos/400/500?random=10",
+    experience:  "15+ Years",
+    patients:    "4 500+",
+    rooms:       "2",
+    sameday:     "Same-Day"
+  },
+  services: [
+    {
+      name: "General Consultations",
+      description: "Illness, infections, minor injuries, script renewals, and full body check-ups — all in one convenient visit.",
+      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`
+    },
+    {
+      name: "Chronic Disease Management",
+      description: "Long-term care plans for diabetes, hypertension, asthma, thyroid, and other chronic conditions — with regular monitoring.",
+      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`
+    },
+    {
+      name: "Paediatric Care",
+      description: "Well-baby assessments, immunisation schedules, growth monitoring, and sick child consultations for all ages.",
+      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/></svg>`
+    },
+    {
+      name: "Women's Health",
+      description: "Contraception counselling, pap smears, antenatal monitoring, and referrals — caring for women at every life stage.",
+      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 13v8M9 18h6"/></svg>`
+    },
+    {
+      name: "Occupational Health",
+      description: "Medical fitness certificates, pre-employment screenings, IOD reports, and driver's medicals for individuals and companies.",
+      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>`
+    },
+    {
+      name: "Minor Procedures",
+      description: "In-room wound care, suturing, abscess drainage, mole and cyst removal — handled with care, no hospital visit needed.",
+      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10z"/><path d="M12 8v4l3 3"/></svg>`
+    }
+  ],
+  process: [
+    { step: "01", title: "Book Your Slot",    desc: "Call or WhatsApp reception to confirm your appointment time — same-day slots often available." },
+    { step: "02", title: "See Dr. Khumalo",   desc: "Thorough, unhurried consultation. Bring your medical aid card and any previous scripts or results." },
+    { step: "03", title: "Leave with a Plan", desc: "Walk out with a clear diagnosis, treatment, prescription, or referral — and a follow-up if needed." }
+  ],
+  testimonials: [
+    {
+      name:     "Thandi M.",
+      location: "Vereeniging",
+      text:     "Dr. Khumalo has been managing my diabetes for three years now. He actually explains things — my numbers are the best they've been in a decade. Finally feel like someone is on my side.",
+      rating:   5
+    },
+    {
+      name:     "Riaan V.",
+      location: "Vanderbijlpark",
+      text:     "Took my whole family here from day one. He remembered details about my kids from visits six months earlier — that kind of thing means a lot. Straightforward, no nonsense, always available.",
+      rating:   5
+    },
+    {
+      name:     "Lerato K.",
+      location: "Three Rivers",
+      text:     "My son had a bad infection and they got us in same morning. Done and sorted within an hour, prescription ready, follow-up booked. This is how a GP practice should work.",
+      rating:   5
+    }
+  ],
+  faqs: [
+    {
+      q: "Do you accept medical aid?",
+      a: "Yes, we are contracted with most major medical aid schemes including Discovery, Momentum, Bonitas, Medihelp, and GEMS. Please call ahead to confirm your specific plan. We also see private (cash) patients at competitive rates."
+    },
+    {
+      q: "What are your consultation fees?",
+      a: "Medical aid patients are billed according to scheme tariffs. Private patients should contact reception for current rates. We offer transparent pricing with no hidden fees — you'll always know the cost upfront."
+    },
+    {
+      q: "Can I get a sick note without a full consultation?",
+      a: "We do not issue sick notes without seeing the patient. A brief consultation ensures we give you the correct advice and an accurate note — it also protects your health and your employer's requirements."
+    },
+    {
+      q: "Do you see walk-in patients?",
+      a: "We strongly recommend booking ahead to avoid waiting times. However, walk-in slots are available on most mornings on a first-come, first-served basis. Arrive by 07:30 for the best chance of same-morning care."
+    },
+    {
+      q: "What should I bring to my first appointment?",
+      a: "Please bring your ID or passport, your medical aid card and membership number, any current chronic medication, and any recent test results or specialist letters you may have. New patients should arrive 10 minutes early to complete a registration form."
+    }
+  ]
+}
+</script>
+
+<!-- ══════════════════════════════════════════
+     NAVIGATION
+══════════════════════════════════════════ -->
+<nav id="navbar" class="sticky top-0 z-50 backdrop-blur-md bg-white/95 border-b border-gray-100 transition-shadow duration-300">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-18 py-4">
+      <!-- Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+        </div>
+        <div>
+          <div class="font-heading font-700 text-primary text-[15px] leading-tight" id="nav-name"></div>
+          <div class="text-[11px] text-muted font-medium" id="nav-credentials"></div>
+        </div>
+      </div>
+      <!-- Desktop links -->
+      <div class="hidden md:flex items-center gap-8">
+        <a href="#services"      class="text-sm font-medium text-gray-600 hover:text-primary transition-colors">Services</a>
+        <a href="#about"         class="text-sm font-medium text-gray-600 hover:text-primary transition-colors">About</a>
+        <a href="#testimonials"  class="text-sm font-medium text-gray-600 hover:text-primary transition-colors">Reviews</a>
+        <a href="#faq"           class="text-sm font-medium text-gray-600 hover:text-primary transition-colors">FAQ</a>
+        <a href="#contact"       class="text-sm font-medium text-gray-600 hover:text-primary transition-colors">Contact</a>
+      </div>
+      <!-- CTA -->
+      <div class="hidden md:flex items-center gap-3">
+        <a id="nav-phone" href="#" class="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primaryDark transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.07 6.07l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          <span id="nav-phone-text"></span>
+        </a>
+        <a id="nav-cta" href="#contact" class="bg-primary text-white text-sm font-semibold px-5 py-2.5 rounded-full hover:bg-primaryDark transition-all duration-200 hover:scale-105 hover:shadow-lg">
+          Book Appointment
+        </a>
+      </div>
+      <!-- Hamburger -->
+      <button id="hamburger" class="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Open menu">
+        <svg id="ham-open" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <svg id="ham-close" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linecap="round" class="hidden"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <!-- Mobile menu -->
+    <div id="mobile-menu" class="mobile-menu md:hidden border-t border-gray-100">
+      <div class="py-4 flex flex-col gap-1">
+        <a href="#services"     class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-surface hover:text-primary rounded-lg transition-colors">Services</a>
+        <a href="#about"        class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-surface hover:text-primary rounded-lg transition-colors">About</a>
+        <a href="#testimonials" class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-surface hover:text-primary rounded-lg transition-colors">Reviews</a>
+        <a href="#faq"          class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-surface hover:text-primary rounded-lg transition-colors">FAQ</a>
+        <a href="#contact"      class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-surface hover:text-primary rounded-lg transition-colors">Contact</a>
+        <div class="pt-2 px-3">
+          <a id="mobile-book" href="#contact" class="block w-full text-center bg-primary text-white text-sm font-semibold px-5 py-3 rounded-full hover:bg-primaryDark transition-colors">
+            Book Appointment
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════
+     HERO
+══════════════════════════════════════════ -->
+<section id="hero" class="relative min-h-screen flex items-center overflow-hidden">
+  <!-- Background image -->
+  <div class="absolute inset-0">
+    <img src="https://picsum.photos/1600/900?random=1" alt="Medical practice" class="w-full h-full object-cover object-center" />
+    <div class="hero-overlay absolute inset-0"></div>
+  </div>
+  <!-- Decorative shapes -->
+  <div class="absolute top-20 right-10 w-64 h-64 rounded-full bg-accent/10 blur-3xl pointer-events-none"></div>
+  <div class="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-white/5 blur-3xl pointer-events-none"></div>
+
+  <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-28">
+    <div class="max-w-3xl">
+      <!-- Credential pill -->
+      <div class="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-8">
+        <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+        <span class="text-white/90 text-sm font-medium" id="hero-pill"></span>
+      </div>
+      <!-- Headline -->
+      <h1 id="hero-headline" class="font-heading font-extrabold text-white text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-[1.05] tracking-tight mb-6"></h1>
+      <!-- Subheadline -->
+      <p id="hero-sub" class="text-white/85 text-lg md:text-xl leading-relaxed max-w-2xl mb-10"></p>
+      <!-- CTAs -->
+      <div class="flex flex-wrap gap-4">
+        <a id="hero-cta1" href="#contact" class="inline-flex items-center gap-2.5 bg-white text-primary font-semibold text-base px-7 py-4 rounded-full hover:bg-gray-50 transition-all duration-200 hover:scale-105 hover:shadow-xl shadow-lg">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span></span>
+        </a>
+        <a id="hero-cta2" href="#services" class="inline-flex items-center gap-2.5 bg-transparent border-2 border-white/60 text-white font-semibold text-base px-7 py-4 rounded-full hover:bg-white/10 hover:border-white transition-all duration-200">
+          <span></span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+      <!-- Trust badges -->
+      <div class="mt-12 flex flex-wrap gap-6">
+        <div class="flex items-center gap-2 text-white/80">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span class="text-sm font-medium">Medical Aid Accepted</span>
+        </div>
+        <div class="flex items-center gap-2 text-white/80">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span class="text-sm font-medium">Same-Day Appointments</span>
+        </div>
+        <div class="flex items-center gap-2 text-white/80">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span class="text-sm font-medium">15+ Years Experience</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Scroll indicator -->
+  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 scroll-indicator">
+    <div class="w-7 h-11 border-2 border-white/40 rounded-full flex justify-center pt-2">
+      <div class="w-1.5 h-3 bg-white/60 rounded-full"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     STATS BAR
+══════════════════════════════════════════ -->
+<section class="py-16 md:py-20 bg-primary">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8" id="stats-grid">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     SERVICES
+══════════════════════════════════════════ -->
+<section id="services" class="py-20 md:py-28 bg-white">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="text-center mb-16 fade-up">
+      <span class="inline-block bg-surface text-primary text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4">What We Treat</span>
+      <h2 class="font-heading font-bold text-primary text-3xl md:text-4xl lg:text-5xl mb-4">Comprehensive Medical Services</h2>
+      <p class="text-muted text-lg max-w-2xl mx-auto">From routine check-ups to chronic disease management — all the care your family needs, under one roof.</p>
+    </div>
+    <!-- Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" id="services-grid">
+      <!-- Rendered by JS -->
+    </div>
+    <!-- Bottom CTA -->
+    <div class="text-center mt-14 fade-up">
+      <p class="text-muted mb-4">Not sure which service you need?</p>
+      <a id="services-wa" href="#" class="inline-flex items-center gap-2.5 bg-[#25D366] text-white font-semibold px-7 py-3.5 rounded-full hover:bg-[#1ebe5a] transition-all duration-200 hover:scale-105 hover:shadow-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Drop Us a WhatsApp
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     HOW IT WORKS
+══════════════════════════════════════════ -->
+<section id="process" class="py-20 md:py-28 bg-surface">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-16 fade-up">
+      <span class="inline-block bg-white text-primary text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4 shadow-sm">Simple Process</span>
+      <h2 class="font-heading font-bold text-primary text-3xl md:text-4xl lg:text-5xl mb-4">Your Visit, Step by Step</h2>
+      <p class="text-muted text-lg max-w-2xl mx-auto">No complicated systems. Just straightforward care from the moment you get in touch.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6" id="process-grid">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     ABOUT / DOCTOR
+══════════════════════════════════════════ -->
+<section id="about" class="py-20 md:py-28 bg-white overflow-hidden">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+      <!-- Image side -->
+      <div class="relative fade-up">
+        <div class="relative z-10 rounded-3xl overflow-hidden shadow-2xl aspect-[4/5] max-w-md mx-auto lg:mx-0">
+          <img id="doctor-img" src="" alt="Doctor" class="w-full h-full object-cover object-top" />
+          <!-- Credential card overlay -->
+          <div class="absolute bottom-6 left-6 right-6 bg-white/95 backdrop-blur-sm rounded-2xl p-4 shadow-xl">
+            <div class="font-heading font-bold text-primary text-lg" id="doctor-name-overlay"></div>
+            <div class="text-muted text-sm mb-3" id="doctor-creds-overlay"></div>
+            <div class="flex flex-wrap gap-2" id="credential-badges">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+        <!-- Decorative element -->
+        <div class="absolute -top-8 -left-8 w-40 h-40 bg-surface rounded-full -z-0 hidden lg:block"></div>
+        <div class="absolute -bottom-8 -right-8 w-24 h-24 bg-accent/10 rounded-full -z-0 hidden lg:block"></div>
+      </div>
+      <!-- Content side -->
+      <div class="fade-up" style="transition-delay:0.15s">
+        <span class="inline-block bg-surface text-primary text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-6">Meet the Doctor</span>
+        <h2 id="about-name" class="font-heading font-bold text-primary text-3xl md:text-4xl lg:text-5xl mb-6 leading-tight"></h2>
+        <p id="about-bio" class="text-gray-600 text-base md:text-lg leading-relaxed mb-8"></p>
+        <!-- Feature list -->
+        <div class="space-y-4 mb-10">
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <span class="text-gray-700">HPCSA registered and fully licensed to practise</span>
+          </div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <span class="text-gray-700">Fellow of the College of Family Physicians of South Africa</span>
+          </div>
+          <div class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <span class="text-gray-700">Serving the Vaal Triangle for over 15 years</span>
+          </div>
+        </div>
+        <!-- CTA -->
+        <div class="flex flex-wrap gap-4">
+          <a id="about-book" href="#contact" class="inline-flex items-center gap-2 bg-primary text-white font-semibold px-7 py-3.5 rounded-full hover:bg-primaryDark transition-all duration-200 hover:scale-105 hover:shadow-lg">
+            Book a Consultation
+          </a>
+          <a id="about-phone" href="#" class="inline-flex items-center gap-2 border-2 border-primary text-primary font-semibold px-7 py-3.5 rounded-full hover:bg-surface transition-all duration-200">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.07 6.07l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <span id="about-phone-text"></span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     TESTIMONIALS
+══════════════════════════════════════════ -->
+<section id="testimonials" class="py-20 md:py-28 bg-primary relative overflow-hidden">
+  <!-- Background pattern -->
+  <div class="absolute inset-0 opacity-5">
+    <div class="absolute top-0 left-0 w-96 h-96 bg-white rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+    <div class="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full translate-x-1/2 translate-y-1/2"></div>
+  </div>
+  <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="text-center mb-16 fade-up">
+      <span class="inline-block bg-white/10 text-white/80 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4">Patient Reviews</span>
+      <h2 class="font-heading font-bold text-white text-3xl md:text-4xl lg:text-5xl mb-4">What Our Patients Say</h2>
+      <p class="text-white/70 text-lg max-w-2xl mx-auto">Real experiences from real Vaal Triangle families.</p>
+    </div>
+    <!-- Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8" id="testimonials-grid">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     FAQ
+══════════════════════════════════════════ -->
+<section id="faq" class="py-20 md:py-28 bg-white">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <div class="text-center mb-16 fade-up">
+      <span class="inline-block bg-surface text-primary text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4">Common Questions</span>
+      <h2 class="font-heading font-bold text-primary text-3xl md:text-4xl lg:text-5xl mb-4">Frequently Asked Questions</h2>
+      <p class="text-muted text-lg max-w-xl mx-auto">Everything you need to know before your first visit.</p>
+    </div>
+    <!-- Accordion -->
+    <div class="space-y-4 fade-up" id="faq-list">
+      <!-- Rendered by JS -->
+    </div>
+    <!-- Bottom CTA -->
+    <div class="mt-12 text-center fade-up">
+      <p class="text-muted mb-4">Still have questions? We're happy to help.</p>
+      <a id="faq-wa" href="#" class="inline-flex items-center gap-2.5 bg-[#25D366] text-white font-semibold px-7 py-3.5 rounded-full hover:bg-[#1ebe5a] transition-all duration-200 hover:scale-105 hover:shadow-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        WhatsApp Us Now
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     CONTACT
+══════════════════════════════════════════ -->
+<section id="contact" class="py-20 md:py-28 bg-surface">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-16 fade-up">
+      <span class="inline-block bg-white text-primary text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4 shadow-sm">Get in Touch</span>
+      <h2 class="font-heading font-bold text-primary text-3xl md:text-4xl lg:text-5xl mb-4">Book Your Appointment</h2>
+      <p class="text-muted text-lg max-w-2xl mx-auto">Prefer to call, WhatsApp, or fill in the form — we'll get back to you promptly.</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-8 md:gap-12">
+      <!-- Contact details -->
+      <div class="lg:col-span-2 space-y-6 fade-up">
+        <!-- Phone -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm flex items-start gap-4">
+          <div class="w-12 h-12 rounded-xl bg-surface flex items-center justify-center flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.07 6.07l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-muted uppercase tracking-wider mb-1">Phone</div>
+            <a id="contact-phone-link" href="#" class="text-primary font-semibold text-lg hover:text-primaryDark transition-colors" id="contact-phone"></a>
+          </div>
+        </div>
+        <!-- WhatsApp -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm flex items-start gap-4">
+          <div class="w-12 h-12 rounded-xl bg-[#25D366]/10 flex items-center justify-center flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-muted uppercase tracking-wider mb-1">WhatsApp</div>
+            <a id="contact-wa-link" href="#" class="text-[#25D366] font-semibold text-lg hover:text-[#1ebe5a] transition-colors">Message Us on WhatsApp</a>
+          </div>
+        </div>
+        <!-- Address -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm flex items-start gap-4">
+          <div class="w-12 h-12 rounded-xl bg-surface flex items-center justify-center flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-muted uppercase tracking-wider mb-1">Address</div>
+            <div class="text-gray-700 font-medium text-sm leading-relaxed" id="contact-address"></div>
+          </div>
+        </div>
+        <!-- Hours -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <div class="text-xs font-bold text-muted uppercase tracking-wider mb-3">Practice Hours</div>
+          <div class="space-y-2" id="contact-hours">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </div>
+      <!-- Form -->
+      <div class="lg:col-span-3 fade-up" style="transition-delay:0.15s">
+        <div class="bg-white rounded-3xl p-8 md:p-10 shadow-lg">
+          <h3 class="font-heading font-bold text-primary text-2xl mb-2">Request an Appointment</h3>
+          <p class="text-muted text-sm mb-8">We'll call you back to confirm your slot within 30 minutes during practice hours.</p>
+          <form id="contact-form" class="space-y-5" onsubmit="handleFormSubmit(event)">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
+                <input type="text" required placeholder="Your full name" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm transition-all duration-200 focus:border-accent" />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Phone Number *</label>
+                <input type="tel" required placeholder="e.g. 082 123 4567" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm transition-all duration-200" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Medical Aid</label>
+              <select class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm transition-all duration-200 text-gray-700">
+                <option value="">Select your medical aid</option>
+                <option>Discovery Health</option>
+                <option>Momentum Health</option>
+                <option>Bonitas</option>
+                <option>Medihelp</option>
+                <option>GEMS</option>
+                <option>Other medical aid</option>
+                <option>Private (cash) patient</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Reason for Visit</label>
+              <select class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm transition-all duration-200 text-gray-700">
+                <option value="">What would you like to see us about?</option>
+                <option>General consultation / sick</option>
+                <option>Chronic disease management</option>
+                <option>Paediatric care (child)</option>
+                <option>Women's health</option>
+                <option>Occupational health / medical certificate</option>
+                <option>Minor procedure</option>
+                <option>New patient registration</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Preferred Appointment Time</label>
+              <div class="grid grid-cols-3 gap-3" id="time-slots">
+                <!-- Rendered by JS -->
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Additional Notes</label>
+              <textarea rows="3" placeholder="Anything else we should know before your appointment?" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm transition-all duration-200 resize-none"></textarea>
+            </div>
+            <button type="submit" class="w-full bg-primary text-white font-semibold py-4 px-6 rounded-xl hover:bg-primaryDark transition-all duration-200 hover:scale-[1.01] hover:shadow-lg text-base">
+              Request Appointment
+            </button>
+            <p class="text-center text-xs text-muted">Or book directly: <a id="form-wa-link" href="#" class="text-[#25D366] font-semibold hover:underline">WhatsApp us now</a></p>
+          </form>
+          <!-- Success state (hidden) -->
+          <div id="form-success" class="hidden text-center py-10">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h3 class="font-heading font-bold text-primary text-xl mb-2">Request Received!</h3>
+            <p class="text-muted text-sm">We'll call you back within 30 minutes during practice hours to confirm your appointment slot.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="mt-10 fade-up">
+      <div class="rounded-3xl overflow-hidden shadow-lg h-64 md:h-80 bg-gray-200 relative">
+        <iframe id="map-iframe" src="" width="100%" height="100%" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Practice Location"></iframe>
+        <div class="absolute inset-0 pointer-events-none border border-gray-200 rounded-3xl"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     FOOTER
+══════════════════════════════════════════ -->
+<footer class="bg-primaryDark text-white">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+      <!-- Brand -->
+      <div class="lg:col-span-1">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
+          <div>
+            <div class="font-heading font-bold text-white text-sm leading-tight" id="footer-name"></div>
+            <div class="text-white/50 text-[11px]" id="footer-tagline"></div>
+          </div>
+        </div>
+        <p class="text-white/60 text-sm leading-relaxed mb-5" id="footer-address-text"></p>
+        <!-- Social -->
+        <div class="flex gap-3">
+          <a href="#" aria-label="Facebook" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+          </a>
+          <a href="#" aria-label="Instagram" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+          </a>
+          <a id="footer-maps" href="#" aria-label="Google Maps" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </a>
+        </div>
+      </div>
+      <!-- Quick links -->
+      <div>
+        <div class="font-heading font-semibold text-white mb-5">Quick Links</div>
+        <ul class="space-y-3 text-sm text-white/60">
+          <li><a href="#services"     class="hover:text-white transition-colors">Our Services</a></li>
+          <li><a href="#about"        class="hover:text-white transition-colors">About Dr. Khumalo</a></li>
+          <li><a href="#testimonials" class="hover:text-white transition-colors">Patient Reviews</a></li>
+          <li><a href="#faq"          class="hover:text-white transition-colors">FAQ</a></li>
+          <li><a href="#contact"      class="hover:text-white transition-colors">Book Appointment</a></li>
+        </ul>
+      </div>
+      <!-- Services -->
+      <div>
+        <div class="font-heading font-semibold text-white mb-5">Services</div>
+        <ul class="space-y-3 text-sm text-white/60" id="footer-services">
+          <!-- Rendered by JS -->
+        </ul>
+      </div>
+      <!-- Hours -->
+      <div>
+        <div class="font-heading font-semibold text-white mb-5">Practice Hours</div>
+        <div class="space-y-3 text-sm" id="footer-hours">
+          <!-- Rendered by JS -->
+        </div>
+        <div class="mt-6">
+          <a id="footer-book" href="#contact" class="block text-center bg-white text-primary font-semibold text-sm py-3 rounded-full hover:bg-gray-100 transition-colors">
+            Book an Appointment
+          </a>
+        </div>
+      </div>
+    </div>
+    <!-- Bottom bar -->
+    <div class="mt-12 pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <p class="text-white/40 text-sm" id="footer-copy"></p>
+      <p class="text-white/30 text-xs">HPCSA Registered Practice</p>
+    </div>
+  </div>
+</footer>
+
+<!-- ══════════════════════════════════════════
+     WHATSAPP FLOATING BUTTON
+══════════════════════════════════════════ -->
+<a id="wa-float" href="#" aria-label="WhatsApp" class="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] rounded-full flex items-center justify-center shadow-xl hover:bg-[#1ebe5a] hover:scale-110 transition-all duration-200 relative wa-pulse">
+  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+<!-- ══════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════ -->
+<script>
+/* ─────── Helpers ─────── */
+function waLink(msg) {
+  const m = msg ? `?text=${encodeURIComponent(msg)}` : '';
+  return `https://wa.me/${CONFIG.business.whatsapp}${m}`;
+}
+function phoneLink(num) {
+  return `tel:${num.replace(/\s/g, '')}`;
+}
+function stars(n) {
+  return '★'.repeat(n) + '☆'.repeat(5 - n);
+}
+function getInitials(name) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+/* ─────── Render: Nav ─────── */
+document.getElementById('nav-name').textContent       = CONFIG.business.name;
+document.getElementById('nav-credentials').textContent = CONFIG.doctor.credentials;
+document.getElementById('nav-phone-text').textContent  = CONFIG.business.phone;
+document.getElementById('nav-phone').href              = phoneLink(CONFIG.business.phone);
+
+/* ─────── Render: Hero ─────── */
+document.getElementById('hero-pill').textContent   = `${CONFIG.doctor.name} · ${CONFIG.doctor.credentials}`;
+document.getElementById('hero-headline').textContent = CONFIG.hero.headline;
+document.getElementById('hero-sub').textContent      = CONFIG.hero.subheadline;
+const cta1 = document.getElementById('hero-cta1');
+cta1.querySelector('span').textContent = CONFIG.hero.cta_primary;
+document.getElementById('hero-cta2').querySelector('span').textContent = CONFIG.hero.cta_secondary;
+
+/* ─────── Render: Stats bar ─────── */
+const stats = [
+  { value: CONFIG.doctor.experience, label: 'Years of Experience',      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
+  { value: CONFIG.doctor.patients,   label: 'Registered Patients',      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>` },
+  { value: 'Medical Aid',            label: 'Accepted by All Major Plans',icon: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>` },
+  { value: CONFIG.doctor.sameday,    label: 'Appointments Available',    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>` },
+];
+const statsGrid = document.getElementById('stats-grid');
+stats.forEach((s, i) => {
+  const div = document.createElement('div');
+  div.className = 'stat-card fade-up text-center bg-white/10 backdrop-blur-sm rounded-2xl p-6';
+  div.style.transitionDelay = `${i * 0.1}s`;
+  div.innerHTML = `
+    <div class="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center mx-auto mb-3">${s.icon}</div>
+    <div class="font-heading font-extrabold text-white text-2xl md:text-3xl mb-1">${s.value}</div>
+    <div class="text-white/65 text-sm">${s.label}</div>
+  `;
+  statsGrid.appendChild(div);
+});
+
+/* ─────── Render: Services grid ─────── */
+const servicesGrid = document.getElementById('services-grid');
+CONFIG.services.forEach((s, i) => {
+  const div = document.createElement('div');
+  div.className = 'service-card fade-up bg-white border border-gray-100 rounded-2xl p-7 shadow-sm';
+  div.style.transitionDelay = `${i * 0.08}s`;
+  div.innerHTML = `
+    <div class="service-icon-bg w-14 h-14 rounded-2xl bg-surface flex items-center justify-center mb-5">${s.icon}</div>
+    <h3 class="font-heading font-bold text-primary text-lg mb-3">${s.name}</h3>
+    <p class="text-muted text-sm leading-relaxed">${s.description}</p>
+    <div class="mt-5 pt-5 border-t border-gray-100">
+      <a href="#contact" class="text-sm font-semibold text-accent hover:text-accentDark transition-colors inline-flex items-center gap-1">
+        Book Now
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+    </div>
+  `;
+  servicesGrid.appendChild(div);
+});
+document.getElementById('services-wa').href = waLink(`Hi Dr. Khumalo, I'd like to find out more about your services.`);
+
+/* ─────── Render: Process ─────── */
+const processGrid = document.getElementById('process-grid');
+CONFIG.process.forEach((p, i) => {
+  const div = document.createElement('div');
+  div.className = 'fade-up text-center md:text-left';
+  div.style.transitionDelay = `${i * 0.15}s`;
+  div.innerHTML = `
+    <div class="relative inline-flex flex-col md:flex-row items-center md:items-start gap-5 w-full">
+      <div class="flex-shrink-0 relative z-10">
+        <div class="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center shadow-lg">
+          <span class="font-heading font-extrabold text-white text-xl">${p.step}</span>
+        </div>
+      </div>
+      <div class="flex-1">
+        <h3 class="font-heading font-bold text-primary text-xl mb-2">${p.title}</h3>
+        <p class="text-muted text-sm leading-relaxed">${p.desc}</p>
+      </div>
+    </div>
+  `;
+  processGrid.appendChild(div);
+});
+
+/* ─────── Render: About ─────── */
+document.getElementById('doctor-img').src             = CONFIG.doctor.image;
+document.getElementById('doctor-name-overlay').textContent = CONFIG.doctor.name;
+document.getElementById('doctor-creds-overlay').textContent = CONFIG.doctor.title;
+const badgeData = ['MBChB (Wits)', 'FCFP(SA)', 'HPCSA Reg.'];
+const badgeContainer = document.getElementById('credential-badges');
+badgeData.forEach(b => {
+  const span = document.createElement('span');
+  span.className = 'credential-badge';
+  span.textContent = b;
+  badgeContainer.appendChild(span);
+});
+document.getElementById('about-name').textContent  = CONFIG.doctor.name;
+document.getElementById('about-bio').textContent   = CONFIG.doctor.bio;
+document.getElementById('about-phone').href        = phoneLink(CONFIG.business.phone);
+document.getElementById('about-phone-text').textContent = CONFIG.business.phone;
+
+/* ─────── Render: Testimonials ─────── */
+const testimonialsGrid = document.getElementById('testimonials-grid');
+CONFIG.testimonials.forEach((t, i) => {
+  const div = document.createElement('div');
+  div.className = 'testimonial-card fade-up bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-7';
+  div.style.transitionDelay = `${i * 0.12}s`;
+  div.innerHTML = `
+    <div class="flex items-center gap-1 mb-4">
+      ${Array(t.rating).fill(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`).join('')}
+    </div>
+    <p class="text-white/85 text-sm leading-relaxed mb-6 italic">"${t.text}"</p>
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full bg-accent/30 flex items-center justify-center flex-shrink-0">
+        <span class="font-heading font-bold text-white text-sm">${getInitials(t.name)}</span>
+      </div>
+      <div>
+        <div class="font-semibold text-white text-sm">${t.name}</div>
+        <div class="text-white/50 text-xs">${t.location}</div>
+      </div>
+    </div>
+  `;
+  testimonialsGrid.appendChild(div);
+});
+
+/* ─────── Render: FAQ ─────── */
+const faqList = document.getElementById('faq-list');
+CONFIG.faqs.forEach((f, i) => {
+  const div = document.createElement('div');
+  div.className = 'bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm';
+  div.innerHTML = `
+    <button onclick="toggleFaq(this, ${i})" class="w-full flex items-center justify-between p-6 text-left hover:bg-surface transition-colors">
+      <span class="font-heading font-semibold text-primary text-base pr-4">${f.q}</span>
+      <span class="faq-icon flex-shrink-0 w-8 h-8 rounded-full bg-surface flex items-center justify-center text-primary font-bold text-xl leading-none">+</span>
+    </button>
+    <div class="faq-content px-6">
+      <p class="text-muted text-sm leading-relaxed pb-6">${f.a}</p>
+    </div>
+  `;
+  faqList.appendChild(div);
+});
+document.getElementById('faq-wa').href = waLink(`Hi, I have a question about booking an appointment at Khumalo Family Practice.`);
+function toggleFaq(btn, idx) {
+  const content = btn.nextElementSibling;
+  const icon    = btn.querySelector('.faq-icon');
+  const isOpen  = content.classList.contains('open');
+  document.querySelectorAll('.faq-content').forEach(c => c.classList.remove('open'));
+  document.querySelectorAll('.faq-icon').forEach(ic => ic.classList.remove('open'));
+  if (!isOpen) { content.classList.add('open'); icon.classList.add('open'); }
+}
+
+/* ─────── Render: Contact ─────── */
+document.getElementById('contact-phone-link').textContent = CONFIG.business.phone;
+document.getElementById('contact-phone-link').href        = phoneLink(CONFIG.business.phone);
+document.getElementById('contact-wa-link').href           = waLink(`Hi, I'd like to book an appointment at ${CONFIG.business.name}.`);
+document.getElementById('contact-address').textContent    = CONFIG.business.address;
+document.getElementById('form-wa-link').href              = waLink(`Hi, I'd like to book an appointment at ${CONFIG.business.name}.`);
+const hoursDiv = document.getElementById('contact-hours');
+[CONFIG.business.hours.weekdays, CONFIG.business.hours.saturday, CONFIG.business.hours.sunday].forEach(h => {
+  const [label, time] = h.split(': ');
+  const p = document.createElement('div');
+  p.className = 'flex justify-between items-center text-sm';
+  p.innerHTML = `<span class="text-gray-600">${label}</span><span class="font-semibold text-primary">${time || 'Closed'}</span>`;
+  hoursDiv.appendChild(p);
+});
+
+/* Map */
+document.getElementById('map-iframe').src = `https://maps.google.com/maps?q=${CONFIG.business.mapQuery}&output=embed`;
+
+/* Time slots */
+const slots = ['Morning (8–11am)', 'Midday (11–2pm)', 'Afternoon (2–5pm)'];
+const slotsGrid = document.getElementById('time-slots');
+slots.forEach((s, i) => {
+  const label = document.createElement('label');
+  label.className = 'cursor-pointer';
+  label.innerHTML = `
+    <input type="radio" name="timeslot" value="${s}" class="hidden peer" ${i === 0 ? 'checked' : ''}>
+    <div class="peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary border-2 border-gray-200 rounded-xl p-3 text-center text-xs font-semibold text-gray-600 hover:border-accent transition-all duration-200">${s}</div>
+  `;
+  slotsGrid.appendChild(label);
+});
+
+/* Form submit */
+function handleFormSubmit(e) {
+  e.preventDefault();
+  document.getElementById('contact-form').classList.add('hidden');
+  document.getElementById('form-success').classList.remove('hidden');
+}
+
+/* ─────── Render: Footer ─────── */
+document.getElementById('footer-name').textContent    = CONFIG.business.name;
+document.getElementById('footer-tagline').textContent = CONFIG.business.tagline;
+document.getElementById('footer-address-text').textContent = CONFIG.business.address;
+document.getElementById('footer-maps').href = `https://maps.google.com/maps?q=${CONFIG.business.mapQuery}`;
+document.getElementById('footer-copy').textContent = `© ${new Date().getFullYear()} ${CONFIG.business.name}. All rights reserved.`;
+const footerServices = document.getElementById('footer-services');
+CONFIG.services.forEach(s => {
+  const li = document.createElement('li');
+  li.innerHTML = `<a href="#services" class="hover:text-white transition-colors">${s.name}</a>`;
+  footerServices.appendChild(li);
+});
+const footerHours = document.getElementById('footer-hours');
+[CONFIG.business.hours.weekdays, CONFIG.business.hours.saturday, CONFIG.business.hours.sunday].forEach(h => {
+  const div = document.createElement('div');
+  div.className = 'text-white/60 text-sm';
+  div.textContent = h;
+  footerHours.appendChild(div);
+});
+
+/* ─────── WhatsApp float ─────── */
+document.getElementById('wa-float').href = waLink(`Hi ${CONFIG.business.name}, I'd like to book an appointment.`);
+
+/* ─────── Nav scroll shadow ─────── */
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('nav-scrolled', window.scrollY > 50);
+});
+
+/* ─────── Mobile hamburger ─────── */
+const hamburger    = document.getElementById('hamburger');
+const mobileMenu   = document.getElementById('mobile-menu');
+const hamOpen      = document.getElementById('ham-open');
+const hamClose     = document.getElementById('ham-close');
+let menuOpen = false;
+hamburger.addEventListener('click', () => {
+  menuOpen = !menuOpen;
+  mobileMenu.classList.toggle('open', menuOpen);
+  hamOpen.classList.toggle('hidden', menuOpen);
+  hamClose.classList.toggle('hidden', !menuOpen);
+});
+mobileMenu.querySelectorAll('a').forEach(a => {
+  a.addEventListener('click', () => {
+    menuOpen = false;
+    mobileMenu.classList.remove('open');
+    hamOpen.classList.remove('hidden');
+    hamClose.classList.add('hidden');
+  });
+});
+
+/* ─────── Intersection observer ─────── */
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.08 });
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
