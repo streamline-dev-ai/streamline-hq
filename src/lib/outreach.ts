@@ -82,9 +82,9 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
 
   // ── Salon-specific ───────────────────────────────────────────────────────
   salon_messaged:
-    "Hi! I heard {business_name} does really good hair and treatments — and noticed you don't have a website yet.\n\nI'm a web designer who works with salons. Any particular reason, or are you already working on one?",
+    "Hi! I heard from a friend that you do really great hair and noticed you don't have a website yet.\n\nI'm a web designer who specialises in hair salons. Any particular reason, or are you already working on one?",
   salon_replied:
-    "A good website helps a lot — clients can book online 24/7, you can sell products directly, promote specials, and it builds real trust with new clients.\n\nWould you be keen for me to build a *free demo* so you can see how it could look? No obligation.",
+    "Would you be interested in a quick free demo so you can see how your website could look? No obligation at all.",
   salon_demo_offer_accepted:
     "Great! I'll put a quick demo together for {business_name}.\n\nWhat's the best email to send it to?",
   salon_someone_building:
@@ -94,9 +94,9 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
 
   // ── Nail salon-specific ──────────────────────────────────────────────────
   nail_salon_messaged:
-    "Hi! I heard you do really great nails — and noticed you don't have a website yet.\n\nI'm a web designer who works with nail salons. Any particular reason, or are you already working on one?",
+    "Hi! I heard from a friend that you do really great nails and noticed you don't have a website yet.\n\nI'm a web designer who specialises in nail salons. Any particular reason, or are you already working on one?",
   nail_salon_replied:
-    "A website makes a real difference — clients can book online any time, you can sell products directly, and it makes the business look way more professional.\n\nWould you want me to build a *free demo* so you can see what it could look like for {business_name}? Zero obligation.",
+    "Would you be interested in a quick free demo so you can see how your website could look? No obligation at all.",
   nail_salon_demo_offer_accepted:
     "Great! I'll put something together based on your services and style.\n\nWhat's the best email to send it to?",
   nail_salon_someone_building:
@@ -106,9 +106,9 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
 
   // ── Beauty salon-specific ────────────────────────────────────────────────
   beauty_salon_messaged:
-    "Hi! I heard you do really good facials and treatments — and noticed you don't have a website yet.\n\nI'm a web designer who works with beauty salons. Any particular reason, or are you already working on one?",
+    "Hi! I heard from a friend that you do really good facials, peels and brow treatments and noticed you don't have a website yet.\n\nI'm a web designer who specialises in beauty salons. Any particular reason, or are you already working on one?",
   beauty_salon_replied:
-    "A website makes a big difference — clients can book online 24/7, you can promote packages and specials, sell retail directly, and it builds real trust before they even walk in.\n\nWould you want me to build a *free demo* so you can see how it could look for {business_name}? Zero obligation.",
+    "Would you be interested in a quick free demo so you can see how your website could look? No obligation at all.",
   beauty_salon_demo_offer_accepted:
     "Great! I'll put something together based on your treatments and style.\n\nWhat's the best email to send it to?",
   beauty_salon_someone_building:
