@@ -11,6 +11,7 @@ import LeadsAnalytics from "@/components/leads/LeadsAnalytics";
 import { useSearchParams } from "react-router-dom";
 import {
   getOutreachMessage,
+  getGatekeeperMessage,
   loadOutreachTemplates,
   OUTREACH_TEMPLATE_META,
   resetOutreachTemplates,
@@ -271,6 +272,7 @@ export default function Leads() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [templatesDraft, setTemplatesDraft] = useState<Record<OutreachTemplateKey, string>>(() => loadOutreachTemplates());
 
+  const [gatekeeperLeadId, setGatekeeperLeadId] = useState<string | null>(null);
   const [editingNicheLeadId, setEditingNicheLeadId] = useState<string | null>(null);
   const [editingNotesLeadId, setEditingNotesLeadId] = useState<string | null>(null);
   const [addingPhoneLeadId, setAddingPhoneLeadId] = useState<string | null>(null);
@@ -1291,11 +1293,12 @@ export default function Leads() {
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const msg = getOutreachMessage({
+                {(() => {
+                  const gatekeeperMsg = getGatekeeperMessage(lead.niche);
+                  const isGatekeeper = gatekeeperLeadId === lead.id;
+                  const displayMsg = isGatekeeper && gatekeeperMsg
+                    ? gatekeeperMsg
+                    : getOutreachMessage({
                         stage: lead.stage,
                         language: lead.language ?? "english",
                         owner_name: lead.owner_name,
@@ -1305,28 +1308,46 @@ export default function Leads() {
                         last_contact_at: lead.last_contact_at,
                         broken_site: lead.broken_site,
                       });
-                      await navigator.clipboard.writeText(msg);
-                      setCopiedOutreachLeadId(lead.id);
-                      pushToast({ type: "success", title: "Copied", message: "Message copied" });
-                    } catch {
-                      pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
-                    }
-                  }}
-                  className="mt-3 w-full rounded-2xl border border-border bg-base/40 px-3 py-3 text-left text-sm text-zinc-100 hover:bg-white/5"
-                >
-                  <div className="text-xs text-zinc-400">Tap to copy message</div>
-                  <div className="mt-1 whitespace-pre-wrap">
-                    {getOutreachMessage({
-                      stage: lead.stage,
-                      language: lead.language ?? "english",
-                      owner_name: lead.owner_name,
-                      business_name: lead.business_name,
-                      niche: lead.niche,
-                      demo_url: lead.demo_url,
-                      last_contact_at: lead.last_contact_at,
-                    })}
-                  </div>
-                </button>
+                  return (
+                    <>
+                      {gatekeeperMsg ? (
+                        <button
+                          type="button"
+                          onClick={() => setGatekeeperLeadId(isGatekeeper ? null : lead.id)}
+                          className={cn(
+                            "mt-3 w-full rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                            isGatekeeper
+                              ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                              : "border-border bg-base/40 text-zinc-400 hover:border-amber-500/40 hover:text-amber-300",
+                          )}
+                        >
+                          {isGatekeeper ? "✓ Not the owner (gatekeeper mode)" : "Not the owner?"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(displayMsg);
+                            setCopiedOutreachLeadId(lead.id);
+                            pushToast({ type: "success", title: "Copied", message: "Message copied" });
+                          } catch {
+                            pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
+                          }
+                        }}
+                        className={cn(
+                          "mt-2 w-full rounded-2xl border px-3 py-3 text-left text-sm text-zinc-100 hover:bg-white/5",
+                          isGatekeeper ? "border-amber-500/30 bg-amber-500/5" : "border-border bg-base/40",
+                        )}
+                      >
+                        <div className="text-xs text-zinc-400">
+                          {isGatekeeper ? "Tap to copy gatekeeper message" : "Tap to copy message"}
+                        </div>
+                        <div className="mt-1 whitespace-pre-wrap">{displayMsg}</div>
+                      </button>
+                    </>
+                  );
+                })()}
 
                 {copiedOutreachLeadId === lead.id ? (
                   <button

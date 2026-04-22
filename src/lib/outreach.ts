@@ -45,7 +45,11 @@ export type OutreachTemplateKey =
   | "nail_beauty_salon_not_interested"
   | "nail_beauty_salon_messaged_broken_site"
   | "messaged_english_has_name_broken_site"
-  | "messaged_english_no_name_broken_site";
+  | "messaged_english_no_name_broken_site"
+  | "salon_gatekeeper"
+  | "nail_salon_gatekeeper"
+  | "beauty_salon_gatekeeper"
+  | "nail_beauty_salon_gatekeeper";
 
 export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
   // ── Opening messages ────────────────────────────────────────────────────────
@@ -82,9 +86,9 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
 
   // ── Salon-specific ───────────────────────────────────────────────────────
   salon_messaged:
-    "Hi! I heard from a friend that you do really great hair and noticed you don't have a website yet.\n\nI'm a web designer who specialises in hair salons. Any particular reason, or are you already working on one?",
+    "Hi! I saw some great reviews for your hair work — you guys seem to do really nice styles. Noticed you don't have a website yet. Any particular reason, or are you already working on one?",
   salon_replied:
-    "Would you be interested in a quick free demo so you can see how your website could look? No obligation at all.",
+    "Cool. Happy to build you a free personalised demo website for your hair salon so you can see exactly how it could look.\n\nNo cost or obligation.\n\nSound interesting?",
   salon_demo_offer_accepted:
     "Great! I'll put a quick demo together for {business_name}.\n\nWhat's the best email to send it to?",
   salon_someone_building:
@@ -94,9 +98,9 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
 
   // ── Nail salon-specific ──────────────────────────────────────────────────
   nail_salon_messaged:
-    "Hi! I heard from a friend that you do really great nails and noticed you don't have a website yet.\n\nI'm a web designer who specialises in nail salons. Any particular reason, or are you already working on one?",
+    "Hi! I saw some great reviews for your nail work — you guys seem to do really nice detailed sets. Noticed you don't have a website yet. Any particular reason, or are you already working on one?",
   nail_salon_replied:
-    "Would you be interested in a quick free demo so you can see how your website could look? No obligation at all.",
+    "Cool. Happy to build you a free personalised demo website for your nail salon so you can see exactly how it could look.\n\nNo cost or obligation.\n\nSound interesting?",
   nail_salon_demo_offer_accepted:
     "Great! I'll put something together based on your services and style.\n\nWhat's the best email to send it to?",
   nail_salon_someone_building:
@@ -106,9 +110,9 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
 
   // ── Beauty salon-specific ────────────────────────────────────────────────
   beauty_salon_messaged:
-    "Hi! I heard from a friend that you do really good facials, peels and brow treatments and noticed you don't have a website yet.\n\nI'm a web designer who specialises in beauty salons. Any particular reason, or are you already working on one?",
+    "Hi! I saw some great reviews for your facials, peels and brow treatments — you guys seem to do really nice work. Noticed you don't have a website yet. Any particular reason, or are you already working on one?",
   beauty_salon_replied:
-    "Would you be interested in a quick free demo so you can see how your website could look? No obligation at all.",
+    "Cool. Happy to build you a free personalised demo website for your beauty services so you can see exactly how it could look.\n\nNo cost or obligation.\n\nSound interesting?",
   beauty_salon_demo_offer_accepted:
     "Great! I'll put something together based on your treatments and style.\n\nWhat's the best email to send it to?",
   beauty_salon_someone_building:
@@ -142,6 +146,16 @@ export const DEFAULT_OUTREACH_TEMPLATES: Record<OutreachTemplateKey, string> = {
     "Hi! I heard from a friend that you do really great nails — and I noticed your website seems to be down.\n\nI'm a web designer who works with nail salons. Is it something you're getting fixed, or are you looking for something new?",
   beauty_salon_messaged_broken_site:
     "Hi! I heard from a friend that you do really good facials and treatments — and I noticed your website seems to be down.\n\nI'm a web designer who works with beauty salons. Is it something you're getting fixed, or are you looking to start fresh?",
+
+  // ── Gatekeeper replies (receptionist / not the owner) ───────────────────────
+  salon_gatekeeper:
+    "No worries at all!\n\nI'm a web designer who specialises in salons. Saw you don't have a website yet and I'd love to build the owner a free personalised demo website.\n\nNo cost or obligation at all.\n\nWould you mind forwarding this to the owner?",
+  nail_salon_gatekeeper:
+    "No worries at all!\n\nI'm a web designer who specialises in salons. Saw you don't have a website yet and I'd love to build the owner a free personalised demo website.\n\nNo cost or obligation at all.\n\nWould you mind forwarding this to the owner?",
+  beauty_salon_gatekeeper:
+    "No worries at all!\n\nI'm a web designer who specialises in salons. Saw you don't have a website yet and I'd love to build the owner a free personalised demo website.\n\nNo cost or obligation at all.\n\nWould you mind forwarding this to the owner?",
+  nail_beauty_salon_gatekeeper:
+    "No worries at all!\n\nI'm a web designer who specialises in salons. Saw you don't have a website yet and I'd love to build the owner a free personalised demo website.\n\nNo cost or obligation at all.\n\nWould you mind forwarding this to the owner?",
 
   // ── Restaurant-specific ──────────────────────────────────────────────────
   restaurant_messaged:
@@ -198,6 +212,10 @@ export const OUTREACH_TEMPLATE_META: Array<{ key: OutreachTemplateKey; label: st
   { key: "nail_salon_messaged_broken_site", label: "🔧 Broken site — Nail salon 2nd message" },
   { key: "beauty_salon_messaged_broken_site", label: "🔧 Broken site — Beauty salon 2nd message" },
   { key: "nail_beauty_salon_messaged_broken_site", label: "🔧 Broken site — Nail & beauty salon 2nd message" },
+  { key: "salon_gatekeeper", label: "💇 Salon — gatekeeper (not the owner)" },
+  { key: "nail_salon_gatekeeper", label: "💅 Nail salon — gatekeeper (not the owner)" },
+  { key: "beauty_salon_gatekeeper", label: "🧖 Beauty salon — gatekeeper (not the owner)" },
+  { key: "nail_beauty_salon_gatekeeper", label: "💅🧖 Nail & beauty — gatekeeper (not the owner)" },
 ];
 
 export type OutreachLead = {
@@ -394,4 +412,14 @@ export function getOutreachMessage(lead: OutreachLead) {
 
   const who = hasName(owner_name) ? owner_name!.trim() : "there";
   return applyVars(templates.follow_up_both, { ...vars, owner_name: who }).trim();
+}
+
+export function getGatekeeperMessage(niche: string | null): string | null {
+  const templates = loadOutreachTemplates();
+  const n = (niche ?? "").trim().toLowerCase();
+  if (n === "salon") return templates.salon_gatekeeper;
+  if (n === "nail salon") return templates.nail_salon_gatekeeper;
+  if (n === "beauty salon") return templates.beauty_salon_gatekeeper;
+  if (n === "nail & beauty salon") return templates.nail_beauty_salon_gatekeeper;
+  return null;
 }
