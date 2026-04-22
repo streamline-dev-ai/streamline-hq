@@ -45,6 +45,7 @@ type LeadRow = {
   notes: string | null;
   opener_used: string | null;
   broken_site: boolean | null;
+  is_archived: boolean | null;
   created_at?: string | null;
 };
 
@@ -161,7 +162,7 @@ const FILTERS: { key: "all" | LeadStage; label: string; stage?: LeadStage }[] = 
   { key: "needs_attention", label: "Needs Attention", stage: "needs_attention" },
 ];
 
-type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted" | "cold";
+type LeadsFilterKey = (typeof FILTERS)[number]["key"] | "follow_up_due" | "not_contacted" | "cold" | "archived";
 
 function normalizePhoneNumber(raw: string) {
   return formatZAPhone(raw);
@@ -346,6 +347,8 @@ export default function Leads() {
     const q = query.trim().toLowerCase();
     return leads
       .filter((l) => {
+        if (filter === "archived") return l.is_archived === true;
+        if (l.is_archived) return false;
         if (nicheFilter !== "all") {
           if ((l.niche ?? "").toLowerCase() !== nicheFilter) return false;
         }
@@ -370,9 +373,9 @@ export default function Leads() {
     setLoading(true);
     try {
       const selectWithLanguage =
-        "id, business_name, owner_name, phone, email, niche, language, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used, created_at";
+        "id, business_name, owner_name, phone, alt_phone, email, niche, language, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used, broken_site, is_archived, created_at";
       const selectWithoutLanguage =
-        "id, business_name, owner_name, phone, email, niche, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used, created_at";
+        "id, business_name, owner_name, phone, alt_phone, email, niche, is_client, follow_up_due, follow_up_type, stage, last_contact_at, demo_url, notes, opener_used, broken_site, is_archived, created_at";
 
       const run = async (includeLanguage: boolean) => {
         return await supabase
@@ -598,6 +601,19 @@ export default function Leads() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to delete lead";
       pushToast({ type: "error", title: "Delete", message: msg });
+    }
+  }
+
+  async function archiveLead(lead: LeadRow) {
+    const next = !lead.is_archived;
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, is_archived: next } : l)).slice().sort(sortLeads));
+    try {
+      const res = await supabase.from("leads").update({ is_archived: next }).eq("id", lead.id);
+      if (res.error) throw res.error;
+      pushToast({ type: "success", title: next ? "Archived" : "Unarchived", message: lead.business_name });
+    } catch (e) {
+      setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, is_archived: !next } : l)).slice().sort(sortLeads));
+      pushToast({ type: "error", title: "Archive", message: e instanceof Error ? e.message : "Failed" });
     }
   }
 
@@ -1064,6 +1080,27 @@ export default function Leads() {
                 {counts.cold}
               </span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setFilter("archived")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
+                filter === "archived"
+                  ? "border-zinc-400/30 bg-zinc-400/10 text-zinc-300"
+                  : "border-border bg-base/40 text-zinc-500 hover:bg-white/5 hover:text-zinc-300",
+              )}
+            >
+              <span>Archived</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs",
+                  filter === "archived" ? "bg-zinc-400/20 text-zinc-300" : "bg-white/5 text-zinc-500",
+                )}
+              >
+                {leads.filter((l) => l.is_archived).length}
+              </span>
+            </button>
               </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
@@ -1160,14 +1197,6 @@ export default function Leads() {
                         )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => deleteLead(lead.id)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-base/40 text-zinc-400 hover:bg-rose-500/20 hover:text-rose-300"
-                      title="Delete lead"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
                     <div className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", stageBadge(stage))}>
                       {formatStageLabel(stage)}
                     </div>
@@ -1364,14 +1393,28 @@ export default function Leads() {
                 ) : null}
 
                 <div className="mt-4 grid gap-2">
-                  <button
-                    type="button"
-                    onClick={() => deleteLead(lead.id)}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/20"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Delete Lead
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void archiveLead(lead)}
+                      className={cn(
+                        "inline-flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+                        lead.is_archived
+                          ? "border-zinc-400/30 bg-zinc-400/10 text-zinc-300 hover:bg-zinc-400/20"
+                          : "border-zinc-500/30 bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-200",
+                      )}
+                    >
+                      {lead.is_archived ? "Unarchive" : "Archive"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteLead(lead.id)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/20"
+                      title="Delete lead permanently"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 gap-2">
                     <label className="text-xs text-zinc-400">Update Stage</label>
                     <div className="flex items-center gap-2">
