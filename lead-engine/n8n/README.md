@@ -26,6 +26,27 @@ Note: Supabase REST reaches the `streamline_hq` schema via the
 `Accept-Profile` / `Content-Profile: streamline_hq` headers (already set
 in the nodes) — that schema is API-exposed.
 
+## Deploy + safe-test from YOUR machine (`deploy.mjs`)
+
+Claude's environment has no internet, so you run this; it makes the API
+calls, you paste the output back for Claude to read & fix.
+
+```powershell
+cd C:\Users\User\Documents\trae_projects\streamline-admin\lead-engine\n8n
+$env:N8N_URL="https://dockerfile-1n82.onrender.com"
+$env:N8N_API_KEY="<n8n -> Settings -> n8n API -> Create API key>"
+$env:SUPABASE_URL="https://lpjwfjkgqpgydzozuusj.supabase.co"
+$env:SUPABASE_SERVICE_KEY="<unified project service_role key>"
+$env:ANTHROPIC_API_KEY="<key>"
+$env:TELEGRAM_CHAT_ID="<your chat id>"
+node deploy.mjs            # import/upsert workflow F + D
+node deploy.mjs --test-f   # also safe-test F (no WhatsApp sent)
+```
+
+Never activates the send-loop, never sends WhatsApp. The Telegram node
+still needs its credential attached once in the n8n UI. Paste the full
+console output back to Claude to iterate.
+
 ## Still to build (bigger / more environment-specific — see ../SETUP.md)
 
 - **A — lead-intake** (Apify Google Maps/IG → dedupe → insert prospects)
