@@ -1,0 +1,112 @@
+{
+  "name": "Lead Engine — D: Send Loop",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] }
+      },
+      "id": "d2a10000-0000-4000-8000-00000000d001",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages?status=eq.approved&or=(scheduled_for.is.null,scheduled_for.lte.{{ $now.toISO() }})&order=sequence_step.desc,scheduled_for.asc&limit=2&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Accept-Profile", "value": "streamline_hq" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d2a10000-0000-4000-8000-00000000d002",
+      "name": "Get Approved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "d2a10000-0000-4000-8000-00000000d003",
+      "name": "Split Messages",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "amount": 120,
+        "unit": "seconds"
+      },
+      "id": "d2a10000-0000-4000-8000-00000000d004",
+      "name": "Human Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [660, 0],
+      "webhookId": "lead-engine-send-wait"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "SET_EVOLUTION_URL/message/sendText/SET_EVOLUTION_INSTANCE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "SET_EVOLUTION_API_KEY" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": {{ JSON.stringify($json.whatsapp_e164 || $json.phone_e164) }},\n  \"text\": {{ JSON.stringify($json.final_text || $json.draft_text) }}\n}",
+        "options": {}
+      },
+      "id": "d2a10000-0000-4000-8000-00000000d005",
+      "name": "Evolution Send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages?id=eq.{{ $('Split Messages').item.json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Content-Profile", "value": "streamline_hq" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"sent\",\n  \"sent_at\": {{ JSON.stringify($now.toISO()) }}\n}",
+        "options": {}
+      },
+      "id": "d2a10000-0000-4000-8000-00000000d006",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0]
+    }
+  ],
+  "connections": {
+    "Every 5 min": { "main": [[{ "node": "Get Approved", "type": "main", "index": 0 }]] },
+    "Get Approved": { "main": [[{ "node": "Split Messages", "type": "main", "index": 0 }]] },
+    "Split Messages": { "main": [[{ "node": "Human Delay", "type": "main", "index": 0 }]] },
+    "Human Delay": { "main": [[{ "node": "Evolution Send", "type": "main", "index": 0 }]] },
+    "Evolution Send": { "main": [[{ "node": "Mark Sent", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

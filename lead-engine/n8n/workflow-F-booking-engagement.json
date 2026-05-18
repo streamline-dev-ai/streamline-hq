@@ -1,0 +1,127 @@
+{
+  "name": "Lead Engine — F: Booking → Hot Follow-up",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-engine-booking",
+        "options": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f001",
+      "name": "Booking Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lead-engine-booking"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospect_engagement?slug=eq.{{ $json.body.slug }}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Accept-Profile", "value": "streamline_hq" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f002",
+      "name": "Get Engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json[0].bookings_count }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f003",
+      "name": "Has Bookings?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "SET_ANTHROPIC_API_KEY" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 320,\n  \"temperature\": 0.7,\n  \"system\": \"You write cold WhatsApp messages for Streamline Automations, a Vaal Triangle web design + automation agency for SA beauty businesses. Voice: casual SA English, friendly, first-name. The prospect's FREE booking page just got a real booking — reframe from free page to the full Tier 2 (R15k) setup. 80-110 words. End with a low-friction CTA and the opt-out line: 'If this isn't for you, just reply STOP and I'll take you off the list.' Sign off 'Christiaan from Streamline'.\",\n  \"messages\": [{\"role\":\"user\",\"content\": {{ JSON.stringify('Prospect: ' + $json[0].business_name + '. Bookings so far: ' + $json[0].bookings_count + '. Write the booking-triggered follow-up.') }} }]\n}",
+        "options": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f004",
+      "name": "Claude Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+            { "name": "Content-Profile", "value": "streamline_hq" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Get Engagement').item.json[0].prospect_id) }},\n  \"sequence_step\": 99,\n  \"draft_text\": {{ JSON.stringify($json.content[0].text) }},\n  \"status\": \"pending_approval\"\n}",
+        "options": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f005",
+      "name": "Insert Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, -80]
+    },
+    {
+      "parameters": {
+        "chatId": "SET_TELEGRAM_CHAT_ID",
+        "text": "=🔥 BOOKING-TRIGGERED follow-up drafted for {{ $('Get Engagement').item.json[0].business_name }} — awaiting approval in the queue.\n\n{{ $('Claude Draft').item.json.content[0].text }}",
+        "additionalFields": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f006",
+      "name": "Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, -80]
+    }
+  ],
+  "connections": {
+    "Booking Webhook": { "main": [[{ "node": "Get Engagement", "type": "main", "index": 0 }]] },
+    "Get Engagement": { "main": [[{ "node": "Has Bookings?", "type": "main", "index": 0 }]] },
+    "Has Bookings?": { "main": [[{ "node": "Claude Draft", "type": "main", "index": 0 }], []] },
+    "Claude Draft": { "main": [[{ "node": "Insert Message", "type": "main", "index": 0 }]] },
+    "Insert Message": { "main": [[{ "node": "Telegram Alert", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
