@@ -170,16 +170,16 @@ function normalizePhoneNumber(raw: string) {
 
 function stageBadge(stage: string | null) {
   const s = (stage ?? "new").toLowerCase();
-  if (s === "new") return "bg-zinc-500/15 text-zinc-300 border-zinc-500/25";
-  if (s === "messaged") return "bg-sky-500/15 text-sky-300 border-sky-500/25";
-  if (s === "replied") return "bg-purple/15 text-purple border-purple/25";
-  if (s === "demo_sent") return "bg-amber-500/15 text-amber-300 border-amber-500/25";
-  if (s === "proposal_sent") return "bg-orange/15 text-orange border-orange/25";
-  if (s === "closed") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
-  if (s === "lost") return "bg-rose-500/15 text-rose-300 border-rose-500/25";
-  if (s === "no_whatsapp") return "bg-yellow-500/15 text-yellow-300 border-yellow-500/25";
-  if (s === "needs_attention") return "bg-violet-500/15 text-violet-300 border-violet-500/25";
-  return "bg-zinc-500/15 text-zinc-300 border-zinc-500/25";
+  if (s === "new") return "bg-surface text-ink-muted border-line";
+  if (s === "messaged") return "bg-brand-soft text-brand border-brand/30";
+  if (s === "replied") return "bg-accent-soft text-accent border-accent/30";
+  if (s === "demo_sent") return "bg-warn-soft text-warn border-warn/30";
+  if (s === "proposal_sent") return "bg-accent-soft text-accent border-accent/30";
+  if (s === "closed") return "bg-success-soft text-success border-success/30";
+  if (s === "lost") return "bg-danger-soft text-danger border-danger/30";
+  if (s === "no_whatsapp") return "bg-warn-soft text-warn border-warn/30";
+  if (s === "needs_attention") return "bg-brand-soft text-brand border-brand/30";
+  return "bg-surface text-ink-muted border-line";
 }
 
 function formatStageLabel(stage: string | null) {
@@ -203,16 +203,16 @@ function notesPreview(notes: string | null) {
 
 function statCard(label: string, value: number | string) {
   return (
-    <div className="rounded-2xl border border-border bg-panel p-3">
-      <div className="text-xs text-zinc-400">{label}</div>
-      <div className="mt-1 text-lg font-semibold leading-none">{value}</div>
+    <div className="rounded-2xl border border-line bg-surface p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</div>
+      <div className="mt-1 text-xl font-bold leading-none tabular-nums text-ink">{value}</div>
     </div>
   );
 }
 
 function SkeletonCard() {
   return (
-    <div className="rounded-2xl border border-border bg-panel p-4">
+    <div className="rounded-2xl border border-line bg-surface p-4">
       <div className="animate-pulse">
         <div className="h-4 w-2/3 rounded bg-white/10" />
         <div className="mt-2 h-3 w-1/2 rounded bg-white/5" />
@@ -925,35 +925,37 @@ export default function Leads() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="text-lg font-semibold leading-none">Lead pipeline</div>
-          <div className="mt-1 text-sm text-zinc-400">Oldest contact first (SAST)</div>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-2xl font-bold tracking-tight text-ink">Leads</div>
+            <div className="mt-0.5 text-sm text-ink-faint">Oldest contact first · SAST</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white shadow-glow active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            Add lead
+          </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 scroll-touch">
           <button
             type="button"
             onClick={() => void loadLeads()}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+            className="inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-ink-muted active:scale-95"
           >
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </button>
           <button
             type="button"
-            onClick={() => setDrawerOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-purple px-3 py-2 text-sm font-semibold text-black hover:brightness-110"
-          >
-            <Plus className="h-4 w-4" />
-            Add Lead
-          </button>
-          <button
-            type="button"
             onClick={() => setImportOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+            className="inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-ink-muted active:scale-95"
           >
             <Upload className="h-4 w-4" />
-            Import leads
+            Import
           </button>
           <button
             type="button"
@@ -961,20 +963,22 @@ export default function Leads() {
               setTemplatesDraft(loadOutreachTemplates());
               setTemplatesOpen(true);
             }}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
+            className="inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-ink-muted active:scale-95"
           >
             Edit templates
           </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2">
         <button
           type="button"
           onClick={() => setTab("pipeline")}
           className={cn(
-            "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold",
-            tab === "pipeline" ? "border-purple/30 bg-purple/15 text-purple" : "border-border bg-panel text-zinc-200 hover:bg-white/5",
+            "inline-flex min-h-[40px] items-center gap-2 rounded-full border px-4 text-sm font-medium transition active:scale-95",
+            tab === "pipeline"
+              ? "border-brand/40 bg-brand-soft text-brand"
+              : "border-line bg-surface text-ink-muted",
           )}
         >
           <span>Pipeline</span>
@@ -983,8 +987,10 @@ export default function Leads() {
           type="button"
           onClick={() => setTab("analytics")}
           className={cn(
-            "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold",
-            tab === "analytics" ? "border-orange/30 bg-orange/15 text-orange" : "border-border bg-panel text-zinc-200 hover:bg-white/5",
+            "inline-flex min-h-[40px] items-center gap-2 rounded-full border px-4 text-sm font-medium transition active:scale-95",
+            tab === "analytics"
+              ? "border-accent/40 bg-accent-soft text-accent"
+              : "border-line bg-surface text-ink-muted",
           )}
         >
           <BarChart3 className="h-4 w-4" />
@@ -994,7 +1000,7 @@ export default function Leads() {
 
       {tab === "pipeline" ? (
         <>
-          <div className="rounded-2xl border border-border bg-panel p-3">
+          <div className="rounded-2xl border border-line bg-surface p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-2">
                 {FILTERS.map((t) => {
@@ -1141,9 +1147,9 @@ export default function Leads() {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-panel p-6 text-center">
-              <div className="text-sm font-semibold">No leads</div>
-              <div className="mt-1 text-sm text-zinc-400">No leads match your current filter/search.</div>
+            <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center">
+              <div className="text-sm font-semibold text-ink">No leads</div>
+              <div className="mt-1 text-sm text-ink-faint">Nothing matches your filter/search.</div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1167,7 +1173,7 @@ export default function Leads() {
                       : { kind: "days", label: days === 0 ? "Today" : `${days}d ago` };
 
             return (
-                  <div key={lead.id} className="rounded-2xl border border-border bg-panel p-4">
+                  <div key={lead.id} className="rounded-2xl border border-line bg-surface p-4 shadow-card">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-base font-semibold text-zinc-100">{lead.business_name}</div>

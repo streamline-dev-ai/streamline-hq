@@ -8,219 +8,184 @@ import {
   Megaphone,
   Settings as SettingsIcon,
   Radio,
-  Calendar,
-  PlusCircle,
-  Lightbulb,
-  BarChart3,
-  ChevronDown
+  MoreHorizontal,
+  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { Sheet } from "@/ui";
 
-type NavItem = {
-  to: string;
-  label: string;
-  Icon: ComponentType<{ className?: string }>;
-  subItems?: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[];
-};
+type NavItem = { to: string; label: string; Icon: LucideIcon };
 
-const NAV: NavItem[] = [
+const PRIMARY: NavItem[] = [
   { to: "/today", label: "Today", Icon: CalendarDays },
   { to: "/leads", label: "Leads", Icon: Users },
   { to: "/messages", label: "Messages", Icon: MessageSquareText },
   { to: "/clients", label: "Clients", Icon: BriefcaseBusiness },
+];
+const SECONDARY: NavItem[] = [
   { to: "/finance", label: "Finance", Icon: Wallet },
-  {
-    to: "/content",
-    label: "Content",
-    Icon: Megaphone,
-    subItems: [
-      { to: "/content?tab=calendar", label: "Calendar", Icon: Calendar },
-      { to: "/content?tab=create", label: "Create", Icon: PlusCircle },
-      { to: "/content?tab=ideas", label: "Ideas", Icon: Lightbulb },
-      { to: "/content?tab=analytics", label: "Analytics", Icon: BarChart3 },
-    ],
-  },
+  { to: "/content", label: "Content", Icon: Megaphone },
   { to: "/settings", label: "Settings", Icon: SettingsIcon },
 ];
+const ALL = [...PRIMARY, ...SECONDARY];
 
 function useRealtimeHealth() {
-  const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "disconnected">("idle");
-
+  const [status, setStatus] = useState<"connecting" | "connected" | "disconnected">(
+    "connecting",
+  );
   useEffect(() => {
     const channel = supabase.channel("realtime-health");
-    setStatus("connecting");
     channel.subscribe((s) => {
       if (s === "SUBSCRIBED") setStatus("connected");
-      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") setStatus("disconnected");
-      if (s === "CLOSED") setStatus("disconnected");
+      else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED")
+        setStatus("disconnected");
     });
     return () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
   return status;
 }
 
-function titleFromPath(pathname: string) {
-  const item = NAV.find((n) => n.to === pathname);
-  return item?.label ?? "Streamline HQ";
+function navClass(active: boolean) {
+  return cn(
+    "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+    active
+      ? "bg-brand-soft text-brand"
+      : "text-ink-muted hover:bg-surface hover:text-ink",
+  );
 }
 
 export default function AppLayout() {
   const location = useLocation();
-  const title = useMemo(() => titleFromPath(location.pathname), [location.pathname]);
   const health = useRealtimeHealth();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const title = useMemo(
+    () => ALL.find((n) => location.pathname.startsWith(n.to))?.label ?? "Streamline HQ",
+    [location.pathname],
+  );
+
+  useEffect(() => setMoreOpen(false), [location.pathname]);
+
+  const dot = (
+    <span
+      className={cn(
+        "h-2 w-2 rounded-full",
+        health === "connected" && "bg-success",
+        health === "connecting" && "bg-ink-faint",
+        health === "disconnected" && "bg-accent",
+      )}
+    />
+  );
 
   return (
-    <div className="min-h-dvh bg-base text-zinc-100">
-      <div className="mx-auto flex min-h-dvh w-full max-w-[1400px] md:gap-4">
-        <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:flex-col md:border-r md:border-border md:bg-base">
-          <div className="flex h-14 items-center gap-2 px-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple/15 text-purple">
+    <div className="min-h-dvh bg-base text-ink">
+      <div className="mx-auto flex min-h-dvh w-full max-w-[1400px]">
+        {/* Desktop sidebar */}
+        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-line bg-panel/60 md:flex">
+          <div className="flex h-16 items-center gap-2.5 px-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand">
               <Radio className="h-5 w-5" />
             </div>
-            <div className="hidden lg:block">
-              <div className="text-sm font-semibold leading-none">Streamline HQ</div>
-              <div className="text-xs text-zinc-400">Agency dashboard</div>
+            <div>
+              <div className="text-sm font-bold leading-none">Streamline HQ</div>
+              <div className="mt-1 text-xs text-ink-faint">Agency control</div>
             </div>
           </div>
-          <nav className="flex flex-1 flex-col gap-1 px-2 pb-4">
-            {NAV.map(({ to, label, Icon, subItems }) => {
-              const isActive = location.pathname.startsWith(to);
-              return (
-                <div key={to} className="flex flex-col gap-1">
-                  <NavLink
-                    to={to}
-                    className={({ isActive: isExactActive }) =>
-                      cn(
-                        "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-zinc-300 transition",
-                        "hover:bg-white/5 hover:text-white",
-                        (isExactActive || isActive) && "bg-purple/15 text-purple hover:text-purple",
-                      )
-                    }
-                  >
-                    <Icon className="h-5 w-5" />
-                    <span className="hidden lg:block flex-1">{label}</span>
-                    {subItems && isActive && (
-                      <ChevronDown className="hidden lg:block h-3.5 w-3.5 opacity-50" />
-                    )}
-                  </NavLink>
-                  {subItems && isActive && (
-                    <div className="hidden lg:flex flex-col gap-1 ml-9 pb-2">
-                      {subItems.map((sub) => (
-                        <NavLink
-                          key={sub.to}
-                          to={sub.to}
-                          className={({ isActive: isSubActive }) =>
-                            cn(
-                              "px-3 py-1.5 text-xs rounded-lg transition",
-                              isSubActive
-                                ? "text-purple bg-purple/5 font-medium"
-                                : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5",
-                            )
-                          }
-                        >
-                          {sub.label}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <nav className="flex flex-1 flex-col gap-1 px-3 py-3">
+            {ALL.map(({ to, label, Icon }) => (
+              <NavLink key={to} to={to} className={({ isActive }) => navClass(isActive)}>
+                <Icon className="h-5 w-5" />
+                {label}
+              </NavLink>
+            ))}
           </nav>
-          <div className="px-4 pb-4">
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2">
-              <span
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  health === "connected" && "bg-emerald-400",
-                  (health === "connecting" || health === "idle") && "bg-zinc-500",
-                  health === "disconnected" && "bg-orange",
-                )}
-              />
-              <div className="hidden lg:block">
-                <div className="text-xs font-medium">Realtime</div>
-                <div className="text-xs text-zinc-400">{health}</div>
-              </div>
+          <div className="m-3 flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2.5">
+            {dot}
+            <div className="text-xs text-ink-muted">
+              Realtime <span className="text-ink-faint">· {health}</span>
             </div>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-10 border-b border-border bg-base/80 px-4 py-3 backdrop-blur md:px-6">
-            <div className="flex items-center justify-between gap-4">
+          <header className="sticky top-0 z-20 border-b border-line bg-base/80 backdrop-blur safe-top">
+            <div className="flex h-14 items-center justify-between gap-4 px-4 md:px-6">
               <div>
                 <div className="text-sm font-semibold leading-none">{title}</div>
-                <div className="text-xs text-zinc-400">South Africa (SAST)</div>
+                <div className="mt-1 text-xs text-ink-faint">South Africa · SAST</div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-panel px-3 py-2 text-xs text-zinc-300">
-                  <span
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      health === "connected" && "bg-emerald-400",
-                      (health === "connecting" || health === "idle") && "bg-zinc-500",
-                      health === "disconnected" && "bg-orange",
-                    )}
-                  />
-                  <span>{health === "connected" ? "Live" : "Offline"}</span>
-                </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
-                  SA
-                </div>
+              <div className="flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink-muted">
+                {dot}
+                <span className="hidden sm:inline">
+                  {health === "connected" ? "Live" : health}
+                </span>
               </div>
             </div>
           </header>
 
-          <main className="min-w-0 flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-6">
+          <main className="min-w-0 flex-1 px-4 pt-4 md:px-6 md:pb-8 pb-safe-nav">
             <Outlet />
           </main>
         </div>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-base/95 px-2 pb-[max(env(safe-area-inset-bottom),0px)] pt-2 backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
-          {NAV.slice(0, 5).map(({ to, label, Icon }) => (
+      {/* Mobile bottom nav */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-base/90 backdrop-blur-xl md:hidden">
+        <div className="safe-bottom mx-auto grid max-w-md grid-cols-5">
+          {PRIMARY.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] text-zinc-400 transition",
-                  "hover:bg-white/5 hover:text-white",
-                  isActive && "bg-purple/15 text-purple",
+                  "flex min-h-[58px] flex-col items-center justify-center gap-1 text-[11px] font-medium transition active:scale-95",
+                  isActive ? "text-brand" : "text-ink-faint",
                 )
               }
             >
               <Icon className="h-5 w-5" />
-              <span className="leading-none">{label}</span>
+              {label}
             </NavLink>
           ))}
+          <button
+            onClick={() => setMoreOpen(true)}
+            className={cn(
+              "flex min-h-[58px] flex-col items-center justify-center gap-1 text-[11px] font-medium transition active:scale-95",
+              SECONDARY.some((s) => location.pathname.startsWith(s.to))
+                ? "text-brand"
+                : "text-ink-faint",
+            )}
+          >
+            <MoreHorizontal className="h-5 w-5" />
+            More
+          </button>
         </div>
-        <div className="mx-auto mt-1 grid max-w-md grid-cols-2 gap-1">
-          {NAV.slice(5).map(({ to, label, Icon }) => (
+      </nav>
+
+      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
+        <div className="grid grid-cols-3 gap-3">
+          {SECONDARY.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center justify-center gap-2 rounded-xl px-2 py-2 text-xs text-zinc-400 transition",
-                  "hover:bg-white/5 hover:text-white",
-                  isActive && "bg-purple/15 text-purple",
+                  "flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border text-sm font-medium transition active:scale-95",
+                  isActive
+                    ? "border-brand/40 bg-brand-soft text-brand"
+                    : "border-line bg-surface text-ink-muted",
                 )
               }
             >
-              <Icon className="h-4 w-4" />
-              <span className="leading-none">{label}</span>
+              <Icon className="h-6 w-6" />
+              {label}
             </NavLink>
           ))}
         </div>
-      </nav>
+      </Sheet>
     </div>
   );
 }
-

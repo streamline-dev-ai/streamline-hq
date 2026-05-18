@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clipboard, Check, Pencil, Save, X } from "lucide-react";
+import { Clipboard, Check, Pencil, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
 import { useToast } from "@/components/toast/ToastProvider";
 import { useLeadContextStore } from "@/stores/leadContext";
+import {
+  Button,
+  Card,
+  CardBody,
+  Badge,
+  Modal,
+  Field,
+  Input,
+  Textarea,
+  EmptyState,
+  PageHeader,
+  PageTransition,
+  Skeleton,
+} from "@/ui";
 
 type TemplateRow = {
   id: string;
@@ -16,23 +29,12 @@ type TemplateRow = {
 };
 
 function languageLabel(language: string | null) {
-  const l = (language ?? "english").toLowerCase();
-  if (l.startsWith("af")) return "Afrikaans";
-  return "English";
+  return (language ?? "english").toLowerCase().startsWith("af") ? "Afrikaans" : "English";
 }
-
-function languageBadgeClass(language: string | null) {
-  const l = (language ?? "english").toLowerCase();
-  if (l.startsWith("af")) return "border-orange/30 bg-orange/15 text-orange";
-  return "border-purple/30 bg-purple/15 text-purple";
-}
-
 function responseRate(sendCount: number, replyCount: number) {
   if (sendCount <= 0) return null;
-  const pct = Math.round((replyCount / sendCount) * 100);
-  return `${pct}%`;
+  return `${Math.round((replyCount / sendCount) * 100)}%`;
 }
-
 function findVariables(text: string) {
   const set = new Set<string>();
   const re = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
@@ -40,7 +42,6 @@ function findVariables(text: string) {
   while ((m = re.exec(text))) set.add(m[1]);
   return Array.from(set);
 }
-
 function renderWithVariables(text: string) {
   const re = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/g;
   const parts: Array<{ type: "text" | "var"; value: string }> = [];
@@ -52,12 +53,11 @@ function renderWithVariables(text: string) {
     last = idx + match[0].length;
   }
   if (last < text.length) parts.push({ type: "text", value: text.slice(last) });
-
   return (
-    <div className="whitespace-pre-wrap text-sm text-zinc-200">
+    <div className="whitespace-pre-wrap text-sm text-ink-muted">
       {parts.map((p, i) =>
         p.type === "var" ? (
-          <span key={i} className="rounded bg-purple/15 px-1 text-purple">
+          <span key={i} className="rounded bg-brand-soft px-1 text-brand">
             {p.value}
           </span>
         ) : (
@@ -67,11 +67,9 @@ function renderWithVariables(text: string) {
     </div>
   );
 }
-
 function applyVariables(text: string, values: Record<string, string>) {
   return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, name: string) => values[name] ?? "");
 }
-
 function groupKey(stage: string) {
   const s = (stage ?? "").toLowerCase().trim();
   if (s === "new" || s === "openers" || s === "opener") return "new";
@@ -80,8 +78,7 @@ function groupKey(stage: string) {
   if (s.includes("follow")) return "follow_up";
   return "other";
 }
-
-const GROUPS: Array<{ key: string; title: string; subtitle: string }> = [
+const GROUPS = [
   { key: "new", title: "New", subtitle: "Openers" },
   { key: "messaged", title: "Messaged", subtitle: "Pitch" },
   { key: "replied", title: "Replied", subtitle: "Demo send" },
@@ -96,47 +93,34 @@ export default function Messages() {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copiedTimeoutRef = useRef<number | null>(null);
-
   const [variableModal, setVariableModal] = useState<{
     template: TemplateRow;
     vars: string[];
     values: Record<string, string>;
   } | null>(null);
-
   const [editModal, setEditModal] = useState<{ template: TemplateRow; text: string } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
     const map = new Map<string, TemplateRow[]>();
-    
     let filteredTemplates = templates;
     if (activeLead) {
       const isRestaurant = (activeLead.niche ?? "").toLowerCase() === "restaurant";
       filteredTemplates = templates.filter((t) => {
         const isRestaurantTemplate = t.name.toLowerCase().startsWith("restaurant");
-        if (isRestaurant) {
-          return isRestaurantTemplate;
-        } else {
-          return !isRestaurantTemplate;
-        }
+        return isRestaurant ? isRestaurantTemplate : !isRestaurantTemplate;
       });
-
       if (activeLead.stage) {
         const leadGroupKey = groupKey(activeLead.stage);
         filteredTemplates = filteredTemplates.filter((t) => groupKey(t.stage) === leadGroupKey);
       }
     }
-
     for (const t of filteredTemplates) {
       const key = groupKey(t.stage);
       map.set(key, [...(map.get(key) ?? []), t]);
     }
-    for (const [k, arr] of map.entries()) {
-      map.set(
-        k,
-        arr.slice().sort((a, b) => a.name.localeCompare(b.name)),
-      );
-    }
+    for (const [k, arr] of map.entries())
+      map.set(k, arr.slice().sort((a, b) => a.name.localeCompare(b.name)));
     return map;
   }, [templates, activeLead]);
 
@@ -151,8 +135,11 @@ export default function Messages() {
       if (res.error) throw res.error;
       setTemplates((res.data ?? []) as TemplateRow[]);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load templates";
-      pushToast({ type: "error", title: "Messages", message: msg });
+      pushToast({
+        type: "error",
+        title: "Messages",
+        message: e instanceof Error ? e.message : "Failed to load templates",
+      });
     } finally {
       setLoading(false);
     }
@@ -165,9 +152,9 @@ export default function Messages() {
   useEffect(() => {
     const channel = supabase
       .channel("message-templates")
-      .on("postgres_changes", { event: "*", schema: "public", table: "message_templates" }, () => {
-        void loadTemplates();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_templates" }, () =>
+        void loadTemplates(),
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -201,16 +188,22 @@ export default function Messages() {
       pushToast({ type: "error", title: "Copy", message: "Clipboard access was blocked" });
       return;
     }
-
     const nextSend = (template.send_count ?? 0) + 1;
-    setTemplates((prev) => prev.map((t) => (t.id === template.id ? { ...t, send_count: nextSend } : t)));
-
+    setTemplates((prev) =>
+      prev.map((t) => (t.id === template.id ? { ...t, send_count: nextSend } : t)),
+    );
     try {
-      const updateRes = await supabase.from("message_templates").update({ send_count: nextSend }).eq("id", template.id);
-      if (updateRes.error) throw updateRes.error;
+      const r = await supabase
+        .from("message_templates")
+        .update({ send_count: nextSend })
+        .eq("id", template.id);
+      if (r.error) throw r.error;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to track send";
-      pushToast({ type: "error", title: "Copy & Track", message: msg });
+      pushToast({
+        type: "error",
+        title: "Copy & Track",
+        message: e instanceof Error ? e.message : "Failed to track send",
+      });
     }
   }
 
@@ -230,17 +223,24 @@ export default function Messages() {
       pushToast({ type: "error", title: "Edit", message: "Template text cannot be empty" });
       return;
     }
-
     setSavingId(editModal.template.id);
-    setTemplates((prev) => prev.map((t) => (t.id === editModal.template.id ? { ...t, text: next } : t)));
+    setTemplates((prev) =>
+      prev.map((t) => (t.id === editModal.template.id ? { ...t, text: next } : t)),
+    );
     try {
-      const res = await supabase.from("message_templates").update({ text: next }).eq("id", editModal.template.id);
-      if (res.error) throw res.error;
+      const r = await supabase
+        .from("message_templates")
+        .update({ text: next })
+        .eq("id", editModal.template.id);
+      if (r.error) throw r.error;
       setEditModal(null);
       pushToast({ type: "success", title: "Saved", message: editModal.template.name });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save template";
-      pushToast({ type: "error", title: "Edit", message: msg });
+      pushToast({
+        type: "error",
+        title: "Edit",
+        message: e instanceof Error ? e.message : "Failed to save template",
+      });
       void loadTemplates();
     } finally {
       setSavingId(null);
@@ -248,97 +248,93 @@ export default function Messages() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-border bg-panel p-4">
-        <div className="text-lg font-semibold leading-none">Message bank</div>
-        <div className="mt-1 text-sm text-zinc-400">
-          One-tap copy with tracking. {activeLead ? `Active lead: ${activeLead.business_name}` : "Select a lead in /leads for smart variables."}
-        </div>
-      </div>
+    <PageTransition>
+      <PageHeader
+        title="Message bank"
+        subtitle={
+          activeLead ? `Active: ${activeLead.business_name}` : "One-tap copy with tracking"
+        }
+      />
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-2xl border border-border bg-panel p-4">
-              <div className="animate-pulse">
-                <div className="h-4 w-2/3 rounded bg-white/10" />
-                <div className="mt-3 h-3 w-full rounded bg-white/5" />
-                <div className="mt-2 h-3 w-4/5 rounded bg-white/5" />
-                <div className="mt-4 h-10 w-full rounded-xl bg-white/10" />
-              </div>
-            </div>
+            <Skeleton key={i} className="h-44 w-full" />
           ))}
         </div>
       ) : templates.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-panel p-6 text-center">
-          <div className="text-sm font-semibold">No templates</div>
-          <div className="mt-1 text-sm text-zinc-400">Add rows to the Supabase `message_templates` table.</div>
-        </div>
+        <EmptyState
+          title="No templates"
+          body="Add rows to the message_templates table in Supabase."
+        />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {GROUPS.map((g) => {
             const list = grouped.get(g.key) ?? [];
             if (list.length === 0) return null;
             return (
               <div key={g.key} className="space-y-2">
-                <div className="flex items-end justify-between">
+                <div className="flex items-end justify-between px-1">
                   <div>
-                    <div className="text-sm font-semibold">{g.title}</div>
-                    <div className="text-xs text-zinc-400">{g.subtitle}</div>
+                    <div className="text-sm font-semibold text-ink">{g.title}</div>
+                    <div className="text-xs text-ink-faint">{g.subtitle}</div>
                   </div>
-                  <div className="text-xs text-zinc-400">{list.length} templates</div>
+                  <div className="text-xs text-ink-faint">{list.length}</div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {list.map((t) => {
-                    const send = t.send_count ?? 0;
-                    const reply = t.reply_count ?? 0;
-                    const rate = responseRate(send, reply);
+                    const rate = responseRate(t.send_count ?? 0, t.reply_count ?? 0);
+                    const isCopied = copiedId === t.id;
                     return (
-                      <div key={t.id} className="rounded-2xl border border-border bg-panel p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="truncate text-base font-semibold">{t.name}</div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                              <div className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold", languageBadgeClass(t.language))}>
-                                {languageLabel(t.language)}
+                      <Card key={t.id}>
+                        <CardBody>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-ink">
+                                {t.name}
                               </div>
-                              {rate ? (
-                                <div className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300">
-                                  {rate} response
-                                </div>
-                              ) : (
-                                <div className="inline-flex items-center rounded-full border border-border bg-white/5 px-2 py-1 text-xs text-zinc-300">
-                                  No data yet
-                                </div>
-                              )}
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                <Badge
+                                  tone={
+                                    languageLabel(t.language) === "Afrikaans"
+                                      ? "accent"
+                                      : "brand"
+                                  }
+                                >
+                                  {languageLabel(t.language)}
+                                </Badge>
+                                {rate ? (
+                                  <Badge tone="success">{rate} reply</Badge>
+                                ) : (
+                                  <Badge>No data</Badge>
+                                )}
+                              </div>
                             </div>
+                            <button
+                              onClick={() => setEditModal({ template: t, text: t.text })}
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-ink-muted active:scale-95"
+                              aria-label="Edit template"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setEditModal({ template: t, text: t.text })}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-base/40 text-zinc-200 hover:bg-white/5"
-                            aria-label="Edit template"
+                          <div className="mt-3">{renderWithVariables(t.text)}</div>
+                          <Button
+                            block
+                            size="md"
+                            variant={isCopied ? "subtle" : "secondary"}
+                            className="mt-4"
+                            onClick={() => void onCopyClick(t)}
                           >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="mt-3">{renderWithVariables(t.text)}</div>
-
-                        <button
-                          type="button"
-                          onClick={() => void onCopyClick(t)}
-                          className={cn(
-                            "mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
-                            copiedId === t.id
-                              ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                              : "border-border bg-base/40 text-zinc-200 hover:bg-white/5",
-                          )}
-                        >
-                          {copiedId === t.id ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-                          {copiedId === t.id ? "Copied!" : "Copy & Track"}
-                        </button>
-                      </div>
+                            {isCopied ? (
+                              <Check className="h-4 w-4" />
+                            ) : (
+                              <Clipboard className="h-4 w-4" />
+                            )}
+                            {isCopied ? "Copied!" : "Copy & Track"}
+                          </Button>
+                        </CardBody>
+                      </Card>
                     );
                   })}
                 </div>
@@ -348,128 +344,78 @@ export default function Messages() {
         </div>
       )}
 
-      {variableModal ? (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="flex max-h-[calc(100dvh-32px)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border bg-panel p-4">
-            <div className="flex shrink-0 items-start justify-between gap-4">
-              <div>
-                <div className="text-base font-semibold">Fill variables</div>
-                <div className="mt-1 text-sm text-zinc-400">These placeholders will be replaced before copying.</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setVariableModal(null)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-base/40 text-zinc-200 hover:bg-white/5"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            <div className="grid gap-3">
-              {variableModal.vars.map((v) => (
-                <div key={v} className="grid gap-1">
-                  <label className="text-xs text-zinc-400">{`{{${v}}}`}</label>
-                  <input
-                    value={variableModal.values[v] ?? ""}
-                    onChange={(e) =>
-                      setVariableModal((p) =>
-                        p
-                          ? {
-                              ...p,
-                              values: { ...p.values, [v]: e.target.value },
-                            }
-                          : p,
-                      )
-                    }
-                    className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple/40"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-border bg-base/40 p-3">
-              <div className="text-xs text-zinc-400">Preview</div>
-              <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">
+      <Modal
+        open={!!variableModal}
+        onClose={() => setVariableModal(null)}
+        title="Fill variables"
+      >
+        {variableModal && (
+          <div className="space-y-3">
+            {variableModal.vars.map((v) => (
+              <Field key={v} label={`{{${v}}}`}>
+                <Input
+                  value={variableModal.values[v] ?? ""}
+                  onChange={(e) =>
+                    setVariableModal((p) =>
+                      p ? { ...p, values: { ...p.values, [v]: e.target.value } } : p,
+                    )
+                  }
+                />
+              </Field>
+            ))}
+            <div className="rounded-xl border border-line bg-base/40 p-3">
+              <div className="text-xs text-ink-faint">Preview</div>
+              <div className="mt-2 whitespace-pre-wrap text-sm text-ink-muted">
                 {applyVariables(variableModal.template.text, variableModal.values)}
               </div>
             </div>
-            </div>
-
-            <div className="mt-4 flex shrink-0 items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setVariableModal(null)}
-                className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
-              >
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setVariableModal(null)}>
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
                 onClick={() => {
-                  const finalText = applyVariables(variableModal.template.text, variableModal.values);
+                  const finalText = applyVariables(
+                    variableModal.template.text,
+                    variableModal.values,
+                  );
                   void copyAndTrack(variableModal.template, finalText);
                   setVariableModal(null);
                 }}
-                className="rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110"
               >
                 Copy & Track
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-      ) : null}
+        )}
+      </Modal>
 
-      {editModal ? (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="flex max-h-[calc(100dvh-32px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border bg-panel p-4">
-            <div className="flex shrink-0 items-start justify-between gap-4">
-              <div>
-                <div className="text-base font-semibold">Edit template</div>
-                <div className="mt-1 text-sm text-zinc-400">{editModal.template.name}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditModal(null)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-base/40 text-zinc-200 hover:bg-white/5"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            <textarea
+      <Modal open={!!editModal} onClose={() => setEditModal(null)} title="Edit template">
+        {editModal && (
+          <div className="space-y-3">
+            <div className="text-xs text-ink-faint">{editModal.template.name}</div>
+            <Textarea
+              rows={8}
               value={editModal.text}
-              onChange={(e) => setEditModal((p) => (p ? { ...p, text: e.target.value } : p))}
-              className="min-h-[180px] w-full rounded-2xl border border-border bg-base/40 p-3 text-sm text-zinc-100 outline-none focus:border-purple/40"
+              onChange={(e) =>
+                setEditModal((p) => (p ? { ...p, text: e.target.value } : p))
+              }
             />
-            </div>
-
-            <div className="mt-4 flex shrink-0 items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditModal(null)}
-                className="rounded-xl border border-border bg-base/40 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
-              >
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setEditModal(null)}>
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                loading={savingId === editModal.template.id}
                 onClick={() => void saveTemplateEdit()}
-                disabled={savingId === editModal.template.id}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-xl bg-purple px-4 py-2 text-sm font-semibold text-black hover:brightness-110",
-                  savingId === editModal.template.id && "opacity-60",
-                )}
               >
                 <Save className="h-4 w-4" />
                 Save
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
+        )}
+      </Modal>
+    </PageTransition>
   );
 }
-

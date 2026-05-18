@@ -1,21 +1,20 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Calendar, PlusCircle, Lightbulb, BarChart3 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import ContentCalendar from "@/components/content/ContentCalendar";
 import ContentCreate from "@/components/content/ContentCreate";
 import ContentIdeas from "@/components/content/ContentIdeas";
 import ContentAnalytics from "@/components/content/ContentAnalytics";
 import { ContentIdea, ContentPost } from "@/types/content";
+import { PageHeader, PageTransition, Segmented } from "@/ui";
 
 const TABS = [
-  { id: "calendar", label: "Calendar", Icon: Calendar },
-  { id: "create", label: "Create", Icon: PlusCircle },
-  { id: "ideas", label: "Ideas", Icon: Lightbulb },
-  { id: "analytics", label: "Analytics", Icon: BarChart3 },
+  { value: "calendar", label: "Calendar" },
+  { value: "create", label: "Create" },
+  { value: "ideas", label: "Ideas" },
+  { value: "analytics", label: "Analytics" },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof TABS)[number]["value"];
 
 export default function Content() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,28 +24,23 @@ export default function Content() {
   const [editingPost, setEditingPost] = useState<ContentPost | null>(null);
 
   useEffect(() => {
-    if (tabParam && tabParam !== activeTab) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+    if (tabParam && tabParam !== activeTab) setActiveTab(tabParam);
+  }, [tabParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabChange = (id: TabId) => {
     setActiveTab(id);
     setSearchParams({ tab: id });
     if (id !== "create") setSelectedIdea(null);
   };
-
   const handleUseIdea = (idea: Partial<ContentIdea>) => {
     setSelectedIdea(idea);
     handleTabChange("create");
   };
-
   const handleNewPost = (date?: string) => {
     setSelectedIdea(date ? { scheduled_for: date } : null);
     setEditingPost(null);
     handleTabChange("create");
   };
-
   const handleEditPost = (post: ContentPost) => {
     setEditingPost(post);
     setSelectedIdea(null);
@@ -54,34 +48,24 @@ export default function Content() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 rounded-xl bg-panel p-1 border border-border">
-          {TABS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => handleTabChange(id)}
-              className={cn(
-                "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition",
-                activeTab === id
-                  ? "bg-purple text-white shadow-lg shadow-purple/20"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-white/5",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
+    <PageTransition>
+      <PageHeader title="Content" subtitle="Plan, create & track posts" />
+      <Segmented
+        value={activeTab}
+        onChange={(v) => handleTabChange(v as TabId)}
+        options={TABS.map((t) => ({ value: t.value, label: t.label }))}
+        className="mb-4"
+      />
       <div className="min-h-0 flex-1">
-        {activeTab === "calendar" && <ContentCalendar onNewPost={handleNewPost} onEditPost={handleEditPost} />}
-        {activeTab === "create" && <ContentCreate initialData={selectedIdea} editingPost={editingPost} />}
+        {activeTab === "calendar" && (
+          <ContentCalendar onNewPost={handleNewPost} onEditPost={handleEditPost} />
+        )}
+        {activeTab === "create" && (
+          <ContentCreate initialData={selectedIdea} editingPost={editingPost} />
+        )}
         {activeTab === "ideas" && <ContentIdeas onUseIdea={handleUseIdea} />}
         {activeTab === "analytics" && <ContentAnalytics />}
       </div>
-    </div>
+    </PageTransition>
   );
 }
-
