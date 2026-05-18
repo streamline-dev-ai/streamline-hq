@@ -1,0 +1,93 @@
+{
+  "name": "Lead Engine — A: Lead Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 6 * * 1" }] }
+      },
+      "id": "a4a10000-0000-4000-8000-00000000a001",
+      "name": "Mon 06:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, -120]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "lead-engine-intake", "options": {} },
+      "id": "a4a10000-0000-4000-8000-00000000a002",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 60],
+      "webhookId": "lead-engine-intake"
+    },
+    {
+      "parameters": {
+        "assignments": { "assignments": [
+          { "id": "s1", "name": "searches", "value": "=[\"nail salon Sandton\",\"lash studio Rosebank\",\"beauty salon Bryanston\"]", "type": "array" }
+        ] },
+        "options": {}
+      },
+      "id": "a4a10000-0000-4000-8000-00000000a003",
+      "name": "Search Terms",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, -30]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=SET_APIFY_TOKEN",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"searchStringsArray\": {{ JSON.stringify($json.searches) }},\n  \"maxCrawledPlacesPerSearch\": 20,\n  \"language\": \"en\",\n  \"countryCode\": \"za\"\n}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "a4a10000-0000-4000-8000-00000000a004",
+      "name": "Apify Google Maps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, -30]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const it of $input.all()) {\n  const p = it.json;\n  const name = p.title || p.name; if (!name) continue;\n  const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');\n  let phone = String(p.phone || p.phoneUnformatted || '').replace(/[^0-9]/g,'');\n  if (phone.startsWith('0') && phone.length===10) phone='27'+phone.slice(1);\n  out.push({ json: {\n    business_name: name,\n    slug,\n    niche: (p.categoryName||'salon').toLowerCase(),\n    suburb: p.city || p.neighborhood || null,\n    phone_e164: phone || null,\n    website: p.website || null,\n    google_rating: p.totalScore || null,\n    google_reviews_count: p.reviewsCount || null,\n    source: 'google_maps',\n    status: 'raw',\n    raw_data: p\n  }});\n}\nreturn out;"
+      },
+      "id": "a4a10000-0000-4000-8000-00000000a005",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, -30]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?on_conflict=slug",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "resolution=ignore-duplicates,return=minimal" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a4a10000-0000-4000-8000-00000000a006",
+      "name": "Upsert Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, -30]
+    }
+  ],
+  "connections": {
+    "Mon 06:00": { "main": [[{ "node": "Search Terms", "type": "main", "index": 0 }]] },
+    "Manual Trigger Webhook": { "main": [[{ "node": "Search Terms", "type": "main", "index": 0 }]] },
+    "Search Terms": { "main": [[{ "node": "Apify Google Maps", "type": "main", "index": 0 }]] },
+    "Apify Google Maps": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "Upsert Prospect", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

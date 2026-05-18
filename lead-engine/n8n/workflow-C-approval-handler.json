@@ -1,0 +1,104 @@
+{
+  "name": "Lead Engine — C: Approval Handler",
+  "nodes": [
+    {
+      "parameters": { "updates": ["callback_query"], "additionalFields": {} },
+      "id": "c3a10000-0000-4000-8000-00000000c001",
+      "name": "Telegram Callback",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "webhookId": "lead-engine-approval"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cb = $input.first().json.callback_query || {};\nconst data = String(cb.data || '');\nconst [action, messageId] = data.split('_');\nreturn [{ json: { action, messageId, chatId: cb.message?.chat?.id, cbId: cb.id } }];"
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c002",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "approve", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "approve" },
+            { "conditions": { "options": { "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "kill", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "kill" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c003",
+      "name": "Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages?id=eq.{{ $json.messageId }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"approved\",\n  \"approval_action\": \"approve\",\n  \"approved_at\": {{ JSON.stringify($now.toISO()) }}\n}",
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c004",
+      "name": "Mark Approved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, -80]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages?id=eq.{{ $json.messageId }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"killed\",\n  \"approval_action\": \"kill\"\n}",
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c005",
+      "name": "Mark Killed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 80]
+    },
+    {
+      "parameters": {
+        "operation": "answerQuery",
+        "queryId": "={{ $('Parse Callback').item.json.cbId }}",
+        "additionalFields": { "text": "Recorded ✓" }
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c006",
+      "name": "Ack",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [920, 0]
+    }
+  ],
+  "connections": {
+    "Telegram Callback": { "main": [[{ "node": "Parse Callback", "type": "main", "index": 0 }]] },
+    "Parse Callback": { "main": [[{ "node": "Action", "type": "main", "index": 0 }]] },
+    "Action": { "main": [[{ "node": "Mark Approved", "type": "main", "index": 0 }], [{ "node": "Mark Killed", "type": "main", "index": 0 }]] },
+    "Mark Approved": { "main": [[{ "node": "Ack", "type": "main", "index": 0 }]] },
+    "Mark Killed": { "main": [[{ "node": "Ack", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

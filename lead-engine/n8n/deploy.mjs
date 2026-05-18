@@ -30,6 +30,7 @@ const SUBS = {
   SET_SUPABASE_URL: process.env.SUPABASE_URL,
   SET_SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
   SET_ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  SET_APIFY_TOKEN: process.env.APIFY_TOKEN,
   SET_TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
   SET_EVOLUTION_URL: process.env.EVOLUTION_URL,
   SET_EVOLUTION_INSTANCE: process.env.EVOLUTION_INSTANCE,
@@ -37,8 +38,12 @@ const SUBS = {
 };
 
 const FILES = [
-  "workflow-F-booking-engagement.json",
+  "workflow-A-lead-intake.json",
+  "workflow-B-enrich-and-draft.json",
+  "workflow-C-approval-handler.json",
   "workflow-D-send-loop.json",
+  "workflow-E-reply-handler.json",
+  "workflow-F-booking-engagement.json",
 ];
 
 function die(msg) {

@@ -1,0 +1,139 @@
+{
+  "name": "Lead Engine — E: Reply Handler",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "lead-engine-reply", "options": {} },
+      "id": "e5a10000-0000-4000-8000-00000000e001",
+      "name": "Evolution Inbound",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lead-engine-reply"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst d = b.data || b;\nconst num = String(d.key?.remoteJid || d.from || '').replace(/[^0-9]/g,'');\nconst text = d.message?.conversation || d.message?.extendedTextMessage?.text || d.body || '';\nconst stop = /\\b(stop|unsubscribe|remove me|haal my af|verwyder asseblief)\\b/i.test(text);\nreturn [{ json: { phone_e164: num, body: text, stop } }];"
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e002",
+      "name": "Extract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?phone_e164=eq.{{ $json.phone_e164 }}&select=id,business_name&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e003",
+      "name": "Find Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $('Extract').item.json.stop }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ] },
+        "options": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e004",
+      "name": "STOP word?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $json[0].id }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"popia_optout\": true,\n  \"popia_optout_at\": {{ JSON.stringify($now.toISO()) }},\n  \"status\": \"dead\"\n}",
+        "options": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e005",
+      "name": "Honour Opt-out",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "x-api-key", "value": "SET_ANTHROPIC_API_KEY" },
+          { "name": "anthropic-version", "value": "2023-06-01" },
+          { "name": "content-type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 200,\n  \"system\": \"Tag this WhatsApp reply to cold outreach about beauty-business websites. Return ONLY JSON: {\\\"sentiment\\\":\\\"hot|warm|cold|no\\\",\\\"suggested_reply\\\":\\\"...\\\",\\\"urgency\\\":\\\"high|med|low\\\"}. hot=wants meeting/quote now; warm=interested with questions; cold=later/busy; no=polite decline.\",\n  \"messages\": [{\"role\":\"user\",\"content\": {{ JSON.stringify('Reply: ' + $('Extract').item.json.body) }} }]\n}",
+        "options": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e006",
+      "name": "Claude Sentiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 60]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/replies",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Find Prospect').item.json[0]?.id) }},\n  \"body\": {{ JSON.stringify($('Extract').item.json.body) }},\n  \"ai_suggested_response\": {{ JSON.stringify($json.content[0].text) }},\n  \"ai_tagged_at\": {{ JSON.stringify($now.toISO()) }}\n}",
+        "options": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e007",
+      "name": "Save Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 60]
+    },
+    {
+      "parameters": {
+        "chatId": "SET_TELEGRAM_CHAT_ID",
+        "text": "=💬 Reply from {{ $('Find Prospect').item.json[0]?.business_name }}:\n\n{{ $('Extract').item.json.body }}\n\nAI: {{ $('Claude Sentiment').item.json.content[0].text }}",
+        "additionalFields": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e008",
+      "name": "Telegram Reply Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1340, 60]
+    }
+  ],
+  "connections": {
+    "Evolution Inbound": { "main": [[{ "node": "Extract", "type": "main", "index": 0 }]] },
+    "Extract": { "main": [[{ "node": "Find Prospect", "type": "main", "index": 0 }]] },
+    "Find Prospect": { "main": [[{ "node": "STOP word?", "type": "main", "index": 0 }]] },
+    "STOP word?": { "main": [[{ "node": "Honour Opt-out", "type": "main", "index": 0 }], [{ "node": "Claude Sentiment", "type": "main", "index": 0 }]] },
+    "Claude Sentiment": { "main": [[{ "node": "Save Reply", "type": "main", "index": 0 }]] },
+    "Save Reply": { "main": [[{ "node": "Telegram Reply Alert", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

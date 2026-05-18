@@ -4,12 +4,16 @@ Importable workflow JSON. In n8n: **Workflows → ⋯ → Import from File**.
 
 ## What's here
 
-| File | What it does | Status |
-|---|---|---|
-| `workflow-F-booking-engagement.json` | Webhook (from booking) → check `prospect_engagement` → if real bookings, Claude drafts the hot upsell → insert as `pending_approval` → Telegram alert. **The killer follow-up.** | Importable scaffold |
-| `workflow-D-send-loop.json` | Every 5 min → pull `approved` messages (step 99 first) → human delay → Evolution send → mark `sent` (DB trigger then schedules D+4/10/18). | Importable scaffold |
+| File | What it does |
+|---|---|
+| `workflow-A-lead-intake.json` | Cron Mon 06:00 (or POST `/webhook/lead-engine-intake`) → Apify Google Maps → normalize/slugify/E.164 → upsert `prospects`. |
+| `workflow-B-enrich-and-draft.json` | Webhook (prospect_id) → Claude Haiku gap analysis → insert `gap_analyses` → branch booking-page vs demo → Claude Sonnet draft → insert message `pending_approval` → Telegram. |
+| `workflow-C-approval-handler.json` | Telegram callback (`approve_<id>` / `kill_<id>`) → update `messages` → ack. |
+| `workflow-D-send-loop.json` | Every 5 min → pull `approved` (step 99 first) → human delay → Evolution send → mark `sent` (DB trigger schedules D+4/10/18). |
+| `workflow-E-reply-handler.json` | Evolution inbound webhook → STOP-word opt-out → Claude Haiku sentiment → insert `replies` → Telegram. |
+| `workflow-F-booking-engagement.json` | Booking webhook → `prospect_engagement` → if real bookings, Claude drafts the hot upsell → `pending_approval` → Telegram. **The killer follow-up.** |
 
-These import cleanly and have the correct node graph. They are **scaffolds**: every `SET_*` value is a placeholder you replace once, in n8n, after import.
+All six are **valid, importable scaffolds**: every `SET_*` value is a placeholder you replace once after import. Expect to tweak node specifics (Telegram credential, expression edge-cases, Apify field names) in the n8n UI — that's normal; paste errors back and I'll fix the JSON.
 
 ## Replace these placeholders (use n8n Variables or edit the nodes)
 

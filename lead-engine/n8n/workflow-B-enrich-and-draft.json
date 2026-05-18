@@ -1,0 +1,187 @@
+{
+  "name": "Lead Engine — B: Enrich & Draft",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "lead-engine-enrich", "options": {} },
+      "id": "b6a10000-0000-4000-8000-00000000b001",
+      "name": "Enrich Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lead-engine-enrich"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $json.body.prospect_id }}&select=*&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b002",
+      "name": "Get Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "x-api-key", "value": "SET_ANTHROPIC_API_KEY" },
+          { "name": "anthropic-version", "value": "2023-06-01" },
+          { "name": "content-type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 700,\n  \"system\": \"You audit a South African beauty business's digital presence for Streamline Automations. Output STRICT JSON only: {\\\"gaps\\\":[{\\\"gap_type\\\":\\\"no_website|dated_design|no_booking|weak_ig|no_whatsapp_cta|slow_mobile|no_pricing|no_reviews_response\\\",\\\"severity\\\":\\\"high|medium|low\\\",\\\"evidence\\\":\\\"...\\\",\\\"fix\\\":\\\"...\\\"}],\\\"hook_angle\\\":\\\"...\\\",\\\"recommended_tier\\\":\\\"tier_1|tier_2|tier_3\\\",\\\"primary_color_hex\\\":\\\"#RRGGBB\\\",\\\"recommended_landing_type\\\":\\\"booking_page|demo_site\\\"}. recommended_landing_type = booking_page if no/with non-functional website, else demo_site.\",\n  \"messages\": [{\"role\":\"user\",\"content\": {{ JSON.stringify('BUSINESS: ' + $json[0].business_name + ' (' + $json[0].niche + ' in ' + ($json[0].suburb||'Gauteng') + '). Website: ' + ($json[0].website||'NONE') + '. Google: ' + ($json[0].google_rating||'?') + ' stars, ' + ($json[0].google_reviews_count||0) + ' reviews. IG followers: ' + ($json[0].instagram_followers||'?') + '. Audit; pick 2-3 strongest monetisable gaps.') }} }]\n}",
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b003",
+      "name": "Claude Gap (Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Get Prospect').item.json[0];\nlet g = {};\ntry { g = JSON.parse($input.first().json.content[0].text); } catch (e) { g = { recommended_landing_type: 'booking_page', primary_color_hex: '#7B3FE4', hook_angle: '', gaps: [] }; }\nreturn [{ json: { ...g, prospect_id: p.id, slug: p.slug, business_name: p.business_name, niche: p.niche } }];"
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b004",
+      "name": "Parse Gap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/gap_analyses",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($json.prospect_id) }},\n  \"gaps\": {{ JSON.stringify($json.gaps || []) }},\n  \"hook_angle\": {{ JSON.stringify($json.hook_angle || '') }},\n  \"recommended_tier\": {{ JSON.stringify($json.recommended_tier || 'tier_1') }},\n  \"primary_color_hex\": {{ JSON.stringify($json.primary_color_hex || '#7B3FE4') }}\n}",
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b005",
+      "name": "Insert Gap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "rules": { "values": [
+          { "conditions": { "options": { "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $('Parse Gap').item.json.recommended_landing_type }}", "rightValue": "demo_site", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "demo_site" }
+        ], "fallbackOutput": "extra" },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b006",
+      "name": "Landing Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $('Parse Gap').item.json;\nreturn [{ json: { ...g, landing_type: 'demo_site', landing_url: 'https://streamline-demos.vercel.app/demo/' + g.slug } }];"
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b007",
+      "name": "Demo URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, -110]
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $('Parse Gap').item.json;\nreturn [{ json: { ...g, landing_type: 'booking_page', landing_url: 'https://booking-page-beta.vercel.app/?biz=' + g.slug } }];"
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b008",
+      "name": "Booking URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 90]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "x-api-key", "value": "SET_ANTHROPIC_API_KEY" },
+          { "name": "anthropic-version", "value": "2023-06-01" },
+          { "name": "content-type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 320,\n  \"temperature\": 0.7,\n  \"system\": \"You write cold WhatsApp messages for Streamline Automations (Vaal Triangle web/automation agency, SA beauty businesses). Casual SA English, first-name, one 👋 max. If landing_type=booking_page: it's a LIVE working booking page you built them — practical, generous, 'I set one up for you'. If demo_site: it's a mockup — 'I threw together a quick mock'. 80-110 words. End with the URL, a low-friction question, then on its own line: 'If this isn't for you, just reply STOP and I'll take you off the list.' Sign 'Christiaan from Streamline'.\",\n  \"messages\": [{\"role\":\"user\",\"content\": {{ JSON.stringify('Business: ' + $json.business_name + ' (' + $json.niche + '). landing_type=' + $json.landing_type + '. URL: ' + $json.landing_url + '. Hook: ' + ($json.hook_angle||'')) }} }]\n}",
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b009",
+      "name": "Claude Draft (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "return=representation" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Claude Draft (Sonnet)').item.json ? ($('Parse Gap').item.json.prospect_id) : null) }},\n  \"sequence_step\": 0,\n  \"draft_text\": {{ JSON.stringify($json.content[0].text) }},\n  \"status\": \"pending_approval\"\n}",
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b010",
+      "name": "Insert Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "SET_TELEGRAM_CHAT_ID",
+        "text": "=🆕 {{ $('Parse Gap').item.json.business_name }} ({{ $('Parse Gap').item.json.recommended_tier }})\n\n{{ $('Claude Draft (Sonnet)').item.json.content[0].text }}\n\nApprove in the queue, or reply with: approve_<id> / kill_<id>",
+        "additionalFields": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b011",
+      "name": "Telegram Approve",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2000, 0]
+    }
+  ],
+  "connections": {
+    "Enrich Webhook": { "main": [[{ "node": "Get Prospect", "type": "main", "index": 0 }]] },
+    "Get Prospect": { "main": [[{ "node": "Claude Gap (Haiku)", "type": "main", "index": 0 }]] },
+    "Claude Gap (Haiku)": { "main": [[{ "node": "Parse Gap", "type": "main", "index": 0 }]] },
+    "Parse Gap": { "main": [[{ "node": "Insert Gap", "type": "main", "index": 0 }]] },
+    "Insert Gap": { "main": [[{ "node": "Landing Type", "type": "main", "index": 0 }]] },
+    "Landing Type": { "main": [[{ "node": "Demo URL", "type": "main", "index": 0 }], [{ "node": "Booking URL", "type": "main", "index": 0 }]] },
+    "Demo URL": { "main": [[{ "node": "Claude Draft (Sonnet)", "type": "main", "index": 0 }]] },
+    "Booking URL": { "main": [[{ "node": "Claude Draft (Sonnet)", "type": "main", "index": 0 }]] },
+    "Claude Draft (Sonnet)": { "main": [[{ "node": "Insert Message", "type": "main", "index": 0 }]] },
+    "Insert Message": { "main": [[{ "node": "Telegram Approve", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
