@@ -22,18 +22,23 @@
     },
     {
       "parameters": {
-        "rules": {
-          "values": [
-            { "conditions": { "options": { "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "approve", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "approve" },
-            { "conditions": { "options": { "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "kill", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "kill" }
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "approve",
+              "operator": { "type": "string", "operation": "equals" }
+            }
           ]
         },
         "options": {}
       },
       "id": "c3a10000-0000-4000-8000-00000000c003",
       "name": "Action",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
       "position": [440, 0]
     },
     {

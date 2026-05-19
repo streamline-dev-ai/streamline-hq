@@ -83,15 +83,23 @@
     },
     {
       "parameters": {
-        "rules": { "values": [
-          { "conditions": { "options": { "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $('Parse Gap').item.json.recommended_landing_type }}", "rightValue": "demo_site", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "demo_site" }
-        ], "fallbackOutput": "extra" },
-        "options": { "fallbackOutput": "extra" }
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Parse Gap').item.json.recommended_landing_type }}",
+              "rightValue": "demo_site",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
       },
       "id": "b6a10000-0000-4000-8000-00000000b006",
       "name": "Landing Type",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
       "position": [1100, 0]
     },
     {
