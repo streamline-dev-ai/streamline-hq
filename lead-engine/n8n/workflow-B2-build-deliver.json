@@ -1,0 +1,173 @@
+{
+  "name": "Lead Engine — B2: Build & Deliver",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c2b10000-0000-4000-8000-00000000c001",
+      "name": "B2 Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $json.prospect_id }}&select=*&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c002",
+      "name": "Get Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the business row, niche-default services, two links and a 4-digit PIN.\n// Defensive: PostgREST returns [{...}]; some n8n versions unwrap it to an object.\nlet p = $('Get Prospect').item.json;\nif (Array.isArray(p)) p = p[0] || {};\n\nconst slug = p.slug;\nconst niche = (p.niche || '').toLowerCase();\nconst businessName = p.business_name || slug;\nconst ownerFirst = (p.owner_first_name || (p.raw_data && p.raw_data.owner_first_name) || '').trim();\nconst pin = String(Math.floor(1000 + Math.random() * 9000));\nconst bookingUrl = 'https://booking-page-beta.vercel.app/?biz=' + slug;\nconst adminUrl = 'https://booking-page-beta.vercel.app/admin?biz=' + slug;\n\nconst SERVICE_SETS = {\n  lash: [\n    { name: 'Classic Full Set', duration: 120, price: 'R450' },\n    { name: 'Hybrid Full Set', duration: 135, price: 'R550' },\n    { name: 'Volume Full Set', duration: 150, price: 'R650' },\n    { name: 'Lash Fill', duration: 60, price: 'R280' },\n    { name: 'Lash Removal', duration: 30, price: 'R150' }\n  ],\n  nail: [\n    { name: 'Gel Manicure', duration: 60, price: 'R280' },\n    { name: 'Gel Overlay', duration: 75, price: 'R350' },\n    { name: 'Acrylic Full Set', duration: 105, price: 'R450' },\n    { name: 'Soak Off & Refresh', duration: 45, price: 'R200' },\n    { name: 'Pedicure', duration: 60, price: 'R320' }\n  ],\n  hair: [\n    { name: 'Cut & Blow Wave', duration: 60, price: 'R350' },\n    { name: 'Full Colour', duration: 150, price: 'R900' },\n    { name: 'Highlights', duration: 180, price: 'R1200' },\n    { name: 'Treatment', duration: 45, price: 'R300' },\n    { name: 'Blow Wave', duration: 45, price: 'R250' }\n  ],\n  brow: [\n    { name: 'Brow Shape & Tint', duration: 45, price: 'R250' },\n    { name: 'Brow Lamination', duration: 60, price: 'R450' },\n    { name: 'Lash Lift', duration: 60, price: 'R450' },\n    { name: 'Henna Brows', duration: 50, price: 'R320' },\n    { name: 'Microblading', duration: 120, price: 'R1500' }\n  ],\n  default: [\n    { name: 'Consultation', duration: 30, price: 'R150' },\n    { name: 'Signature Treatment', duration: 60, price: 'R450' },\n    { name: 'Express Service', duration: 30, price: 'R250' },\n    { name: 'Premium Package', duration: 120, price: 'R850' }\n  ]\n};\nconst ACCENTS = { lash: '#B76E79', nail: '#C084FC', hair: '#0EA5E9', brow: '#A16207', default: '#7B3FE4' };\n\nlet key = 'default';\nif (niche.includes('lash')) key = 'lash';\nelse if (niche.includes('nail')) key = 'nail';\nelse if (niche.includes('hair')) key = 'hair';\nelse if (niche.includes('brow')) key = 'brow';\n\nconst accent = ACCENTS[key];\nconst services = SERVICE_SETS[key].map((s, i) => ({ business_id: slug, name: s.name, duration: s.duration, price: s.price, sort_order: i }));\n\nconst business = {\n  id: slug,\n  name: businessName,\n  slug: slug,\n  accent_color: accent,\n  prospect_id: p.id,\n  is_streamline_owned: true,\n  show_streamline_promo: true,\n  working_days: [1, 2, 3, 4, 5, 6],\n  working_hours: { start: 8, end: 17 },\n  slot_interval: 30,\n  advance_days: 30,\n  same_day: true,\n  phone: p.whatsapp_e164 || p.phone_e164 || null\n};\n\nreturn [{ json: {\n  prospect_id: p.id,\n  slug,\n  niche: p.niche || key,\n  business_name: businessName,\n  owner_first_name: ownerFirst,\n  pin,\n  booking_url: bookingUrl,\n  admin_url: adminUrl,\n  business,\n  services\n} }];"
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c003",
+      "name": "Prepare",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ $('Prepare').item.json.pin }}",
+        "dataPropertyName": "admin_pin_hash",
+        "encoding": "hex"
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c004",
+      "name": "Hash PIN",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/businesses",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({}, $('Prepare').item.json.business, { admin_pin_hash: $json.admin_pin_hash })) }}",
+        "options": {}
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c005",
+      "name": "Upsert Business",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=SET_SUPABASE_URL/rest/v1/services?business_id=eq.{{ $('Prepare').item.json.slug }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" }
+        ] },
+        "options": {}
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c006",
+      "name": "Clear Services",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/services",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "return=minimal" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare').item.json.services) }}",
+        "options": {}
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c007",
+      "name": "Create Services",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// FIXED delivery template (template-fill, no AI). Two links + PIN.\nconst g = $('Prepare').item.json;\nconst who = (g.owner_first_name && g.owner_first_name.length) ? g.owner_first_name : g.business_name;\nconst text = [\n  who + ', sorted \\u2014 here\\'s your booking setup, two links:',\n  '',\n  'Your booking page (share this or pop it in your bio):',\n  g.booking_url,\n  '',\n  'Your admin app (just for you):',\n  g.admin_url,\n  'PIN: ' + g.pin,\n  '',\n  'Open the admin link on your phone and tap \"Add to Home Screen\" \\u2014 it installs like an app. That\\'s where every booking lands, and where you can change your services, prices and hours yourself anytime.',\n  '',\n  'I\\'ve added some standard ' + g.niche + ' services to start you off \\u2014 go in and make them yours.',\n  '',\n  'The only catch, like I said \\u2014 once you\\'ve had a play and you\\'re happy, a quick Google review for Streamline Automations. And a follow on @streamline_automations if you\\'re feeling generous.',\n  '',\n  'Have a look and tell me what you think.',\n  '',\n  '\\u2014 Christiaan from Streamline'\n].join('\\n');\nreturn [{ json: { prospect_id: g.prospect_id, business_name: g.business_name, draft_text: text } }];"
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c008",
+      "name": "Build Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "return=representation" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Build Delivery').item.json.prospect_id) }},\n  \"sequence_step\": 1,\n  \"draft_text\": {{ JSON.stringify($('Build Delivery').item.json.draft_text) }},\n  \"status\": \"pending_approval\"\n}",
+        "options": {}
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c009",
+      "name": "Insert Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "SET_TELEGRAM_CHAT_ID",
+        "text": "=📦 Delivery ready (said YES): {{ $('Build Delivery').item.json.business_name }}\n\n{{ $('Build Delivery').item.json.draft_text }}\n\nApprove: approve_{{ ($json[0] || $json).id }} / kill_{{ ($json[0] || $json).id }}",
+        "additionalFields": {}
+      },
+      "id": "c2b10000-0000-4000-8000-00000000c010",
+      "name": "Telegram Approve",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1980, 0]
+    }
+  ],
+  "connections": {
+    "B2 Trigger": { "main": [[{ "node": "Get Prospect", "type": "main", "index": 0 }]] },
+    "Get Prospect": { "main": [[{ "node": "Prepare", "type": "main", "index": 0 }]] },
+    "Prepare": { "main": [[{ "node": "Hash PIN", "type": "main", "index": 0 }]] },
+    "Hash PIN": { "main": [[{ "node": "Upsert Business", "type": "main", "index": 0 }]] },
+    "Upsert Business": { "main": [[{ "node": "Clear Services", "type": "main", "index": 0 }]] },
+    "Clear Services": { "main": [[{ "node": "Create Services", "type": "main", "index": 0 }]] },
+    "Create Services": { "main": [[{ "node": "Build Delivery", "type": "main", "index": 0 }]] },
+    "Build Delivery": { "main": [[{ "node": "Insert Message", "type": "main", "index": 0 }]] },
+    "Insert Message": { "main": [[{ "node": "Telegram Approve", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

@@ -36,7 +36,19 @@
       "name": "Find Prospect",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
       "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten the prospect lookup to one clean object (defensive vs PostgREST array / unwrap).\nlet r = $json;\nif (Array.isArray(r)) r = r[0];\nr = r || {};\nreturn [{ json: { prospect_id: r.id || null, business_name: r.business_name || 'Unknown number', found: !!r.id } }];"
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e013",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
     },
     {
       "parameters": {
@@ -47,7 +59,7 @@
       "name": "STOP word?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [880, 0]
     },
     {
       "parameters": {
@@ -61,14 +73,14 @@
         ] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 200,\n  \"system\": \"Tag this WhatsApp reply to cold outreach about beauty-business websites. Return ONLY JSON: {\\\"sentiment\\\":\\\"hot|warm|cold|no\\\",\\\"suggested_reply\\\":\\\"...\\\",\\\"urgency\\\":\\\"high|med|low\\\"}. Definitions — hot: wants a meeting/quote/to start now. warm: genuinely interested, asking questions. cold: clearly positive but just bad timing (e.g. 'looks great, message me again after December'). no: ANY decline, disinterest, annoyance, suspicion, or unwillingness to be contacted — examples: 'no', 'nah', 'not interested', 'not now', 'we're good', 'who is this?', 'how did you get my number', 'please don't message me', 'remove me', 'stop'. RULE: if a reply seems even mildly unwilling, or you are unsure between cold and no, you MUST choose no. Err toward no.\",\n  \"messages\": [{\"role\":\"user\",\"content\": {{ JSON.stringify('Reply: ' + $('Extract').item.json.body) }} }]\n}",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 200,\n  \"system\": \"Tag this WhatsApp reply to cold outreach offering a free booking system to a beauty business. Return ONLY JSON: {\\\"sentiment\\\":\\\"hot|warm|cold|no\\\",\\\"suggested_reply\\\":\\\"...\\\",\\\"urgency\\\":\\\"high|med|low\\\"}. Definitions — hot: clearly says yes / wants it / wants to start now. warm: interested, asking questions, leaning yes. cold: clearly positive but just bad timing (e.g. 'looks great, message me again after December'). no: ANY decline, disinterest, annoyance, suspicion, or unwillingness to be contacted — examples: 'no', 'nah', 'not interested', 'not now', 'we're good', 'who is this?', 'how did you get my number', 'please don't message me', 'remove me', 'stop'. RULE: a YES or any clear interest is hot/warm; if a reply seems even mildly unwilling, or you are unsure between cold and no, you MUST choose no. Err toward no.\",\n  \"messages\": [{\"role\":\"user\",\"content\": {{ JSON.stringify('Reply: ' + $('Extract').item.json.body) }} }]\n}",
         "options": {}
       },
       "id": "e5a10000-0000-4000-8000-00000000e006",
       "name": "Claude Sentiment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 120]
+      "position": [1120, 120]
     },
     {
       "parameters": {
@@ -78,7 +90,7 @@
       "name": "Parse Sentiment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 120]
+      "position": [1340, 120]
     },
     {
       "parameters": {
@@ -93,14 +105,15 @@
         ] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Find Prospect').item.json[0]?.id) }},\n  \"body\": {{ JSON.stringify($('Extract').item.json.body) }},\n  \"sentiment\": {{ JSON.stringify($('Parse Sentiment').item.json.sentiment) }},\n  \"ai_suggested_response\": {{ JSON.stringify($('Parse Sentiment').item.json.suggested_reply) }},\n  \"ai_tagged_at\": {{ JSON.stringify($now.toISO()) }}\n}",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Normalize').item.json.prospect_id) }},\n  \"body\": {{ JSON.stringify($('Extract').item.json.body) }},\n  \"sentiment\": {{ JSON.stringify($('Parse Sentiment').item.json.sentiment) }},\n  \"ai_suggested_response\": {{ JSON.stringify($('Parse Sentiment').item.json.suggested_reply) }},\n  \"ai_tagged_at\": {{ JSON.stringify($now.toISO()) }}\n}",
         "options": {}
       },
       "id": "e5a10000-0000-4000-8000-00000000e007",
       "name": "Save Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 120]
+      "onError": "continueRegularOutput",
+      "position": [1560, 120]
     },
     {
       "parameters": {
@@ -111,24 +124,61 @@
       "name": "Decline?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1560, 120]
+      "position": [1780, 120]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "version": 2 }, "combinator": "or", "conditions": [
+          { "leftValue": "={{ $('Parse Sentiment').item.json.sentiment }}", "rightValue": "hot", "operator": { "type": "string", "operation": "equals" } },
+          { "leftValue": "={{ $('Parse Sentiment').item.json.sentiment }}", "rightValue": "warm", "operator": { "type": "string", "operation": "equals" } }
+        ] },
+        "options": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e014",
+      "name": "Interested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass the prospect id to B2 (build & deliver).\nreturn [{ json: { prospect_id: $('Normalize').item.json.prospect_id } }];"
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e015",
+      "name": "B2 Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 120]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "SET_B2_WORKFLOW_ID",
+        "options": {}
+      },
+      "id": "e5a10000-0000-4000-8000-00000000e016",
+      "name": "Call B2",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "onError": "continueRegularOutput",
+      "position": [2440, 120]
     },
     {
       "parameters": {
         "chatId": "SET_TELEGRAM_CHAT_ID",
-        "text": "=💬 Reply from {{ $('Find Prospect').item.json[0]?.business_name }} [{{ $('Parse Sentiment').item.json.sentiment }}]:\n\n{{ $('Extract').item.json.body }}\n\nSuggested: {{ $('Parse Sentiment').item.json.suggested_reply }}",
+        "text": "=💬 Reply from {{ $('Normalize').item.json.business_name }} [{{ $('Parse Sentiment').item.json.sentiment }}]:\n\n{{ $('Extract').item.json.body }}\n\nSuggested: {{ $('Parse Sentiment').item.json.suggested_reply }}",
         "additionalFields": {}
       },
       "id": "e5a10000-0000-4000-8000-00000000e008",
       "name": "Telegram Reply Alert",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1780, 220]
+      "position": [2440, 300]
     },
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=SET_SUPABASE_URL/rest/v1/messages?prospect_id=eq.{{ $('Find Prospect').item.json[0].id }}&status=in.(pending_approval,pending_draft,approved)",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages?prospect_id=eq.{{ $('Normalize').item.json.prospect_id }}&status=in.(pending_approval,pending_draft,approved)",
         "sendHeaders": true,
         "headerParameters": { "parameters": [
           { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
@@ -145,12 +195,13 @@
       "name": "Cancel Messages",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, -160]
+      "onError": "continueRegularOutput",
+      "position": [1340, -160]
     },
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $('Find Prospect').item.json[0].id }}",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $('Normalize').item.json.prospect_id }}",
         "sendHeaders": true,
         "headerParameters": { "parameters": [
           { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
@@ -167,30 +218,35 @@
       "name": "Honour Opt-out",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, -160]
+      "onError": "continueRegularOutput",
+      "position": [1560, -160]
     },
     {
       "parameters": {
         "chatId": "SET_TELEGRAM_CHAT_ID",
-        "text": "=🚫 Opted out: {{ $('Find Prospect').item.json[0]?.business_name }} ({{ $('Extract').item.json.phone_e164 }})\n\nReply: \"{{ $('Extract').item.json.body }}\"\n\nMarked dead, POPIA opt-out logged, pending messages cancelled.",
+        "text": "=🚫 Opted out: {{ $('Normalize').item.json.business_name }} ({{ $('Extract').item.json.phone_e164 }})\n\nReply: \"{{ $('Extract').item.json.body }}\"\n\nMarked dead, POPIA opt-out logged, pending messages cancelled.",
         "additionalFields": {}
       },
       "id": "e5a10000-0000-4000-8000-00000000e012",
       "name": "Telegram Opt-out",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1560, -160]
+      "position": [1780, -160]
     }
   ],
   "connections": {
     "Evolution Inbound": { "main": [[{ "node": "Extract", "type": "main", "index": 0 }]] },
     "Extract": { "main": [[{ "node": "Find Prospect", "type": "main", "index": 0 }]] },
-    "Find Prospect": { "main": [[{ "node": "STOP word?", "type": "main", "index": 0 }]] },
+    "Find Prospect": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "STOP word?", "type": "main", "index": 0 }]] },
     "STOP word?": { "main": [[{ "node": "Cancel Messages", "type": "main", "index": 0 }], [{ "node": "Claude Sentiment", "type": "main", "index": 0 }]] },
     "Claude Sentiment": { "main": [[{ "node": "Parse Sentiment", "type": "main", "index": 0 }]] },
     "Parse Sentiment": { "main": [[{ "node": "Save Reply", "type": "main", "index": 0 }]] },
     "Save Reply": { "main": [[{ "node": "Decline?", "type": "main", "index": 0 }]] },
-    "Decline?": { "main": [[{ "node": "Cancel Messages", "type": "main", "index": 0 }], [{ "node": "Telegram Reply Alert", "type": "main", "index": 0 }]] },
+    "Decline?": { "main": [[{ "node": "Cancel Messages", "type": "main", "index": 0 }], [{ "node": "Interested?", "type": "main", "index": 0 }]] },
+    "Interested?": { "main": [[{ "node": "B2 Input", "type": "main", "index": 0 }], [{ "node": "Telegram Reply Alert", "type": "main", "index": 0 }]] },
+    "B2 Input": { "main": [[{ "node": "Call B2", "type": "main", "index": 0 }]] },
+    "Call B2": { "main": [[{ "node": "Telegram Reply Alert", "type": "main", "index": 0 }]] },
     "Cancel Messages": { "main": [[{ "node": "Honour Opt-out", "type": "main", "index": 0 }]] },
     "Honour Opt-out": { "main": [[{ "node": "Telegram Opt-out", "type": "main", "index": 0 }]] }
   },
