@@ -37,14 +37,19 @@ const SUBS = {
   SET_EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY,
 };
 
+// Order matters: B2 must import before E so E's "Call B2" node can be
+// auto-wired to B2's real workflow id (see B2_NAME handling below).
 const FILES = [
   "workflow-A-lead-intake.json",
   "workflow-B-enrich-and-draft.json",
+  "workflow-B2-build-deliver.json",
   "workflow-C-approval-handler.json",
   "workflow-D-send-loop.json",
   "workflow-E-reply-handler.json",
   "workflow-F-booking-engagement.json",
 ];
+
+const B2_NAME = "Lead Engine — B2: Build & Deliver";
 
 function die(msg) {
   console.error(`\n❌ ${msg}`);
@@ -89,10 +94,17 @@ function applySubs(raw) {
   const byName = new Map(
     (existing.body?.data || []).map((w) => [w.name, w.id]),
   );
+  // B2's id — from an earlier import this run, or one already in n8n — so E's
+  // "Call B2" node points at the real sub-workflow instead of the placeholder.
+  let b2Id = byName.get(B2_NAME) || null;
 
   for (const file of FILES) {
     const wf = JSON.parse(readFileSync(join(DIR, file), "utf8"));
-    const { raw, missing } = applySubs(JSON.stringify(wf));
+    let { raw, missing } = applySubs(JSON.stringify(wf));
+    if (raw.includes("SET_B2_WORKFLOW_ID")) {
+      if (b2Id) raw = raw.split("SET_B2_WORKFLOW_ID").join(b2Id);
+      else missing = [...missing, "SET_B2_WORKFLOW_ID (import B2 first, or set the Call B2 node manually)"];
+    }
     if (missing.length)
       console.log(`⚠ ${file}: no env value for ${missing.join(", ")} — left as placeholder, fix in n8n UI.`);
     const payload = JSON.parse(raw);
@@ -111,6 +123,7 @@ function applySubs(raw) {
       continue;
     }
     const wfId = r.body?.id || id;
+    if (payload.name === B2_NAME) b2Id = wfId; // so E (imported after) wires to it
     console.log(`✓ ${id ? "updated" : "created"}: "${payload.name}" (id ${wfId})`);
     if (file.includes("workflow-F")) {
       console.log(`  Webhook (after you Activate it in n8n): ${N8N_URL}/webhook/lead-engine-booking`);

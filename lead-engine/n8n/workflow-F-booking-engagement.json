@@ -41,7 +41,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "leftValue": "={{ $json[0].bookings_count }}",
+              "leftValue": "={{ ($json[0] || $json).bookings_count }}",
               "rightValue": 0,
               "operator": { "type": "number", "operation": "gt" }
             }
@@ -57,25 +57,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-api-key", "value": "SET_ANTHROPIC_API_KEY" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 320,\n  \"temperature\": 0.7,\n  \"system\": \"You write cold WhatsApp messages for Streamline Automations, a Vaal Triangle web design + automation agency for SA beauty businesses. Voice: casual SA English, friendly, first-name. The prospect's FREE booking page just got a real booking — reframe from free page to the full Tier 2 (R15k) setup. 80-110 words. End with a low-friction CTA and the opt-out line: 'If this isn't for you, just reply STOP and I'll take you off the list.' Sign off 'Christiaan from Streamline'.\",\n  \"messages\": [{\"role\":\"user\",\"content\": {{ JSON.stringify('Prospect: ' + $json[0].business_name + '. Bookings so far: ' + $json[0].bookings_count + '. Write the booking-triggered follow-up.') }} }]\n}",
-        "options": {}
+        "jsCode": "// FIXED template (deterministic, no AI, no drift). Booking-triggered upsell.\n// Bullets MUST match the admin app's locked premium cards.\nlet e = $('Get Engagement').item.json;\nif (Array.isArray(e)) e = e[0];\ne = e || {};\n\nconst who = (e.owner_first_name && e.owner_first_name.trim()) ? e.owner_first_name.trim() : '';\nconst biz = e.business_name || 'your salon';\nconst hasDetail = e.latest_customer_first_name && e.latest_service_name;\n\nconst bookingLine = hasDetail\n  ? biz + ' just took a booking off the free page \\u2014 ' + e.latest_customer_first_name + ' for ' + e.latest_service_name + (e.latest_booking_date_human ? ' on ' + e.latest_booking_date_human : '') + '. That\\'s the whole idea.'\n  : biz + ' just took a booking straight off the free page I set up. That\\'s the whole idea.';\n\nconst text = [\n  (who ? who + ', quick one.' : 'Quick one.'),\n  '',\n  bookingLine,\n  '',\n  'Now imagine the full setup:',\n  '- Take deposits so clients can\\'t no-show',\n  '- Automatic WhatsApp + email reminders before every appointment',\n  '- Your own domain instead of the shared link',\n  '- An online store for products, vouchers and packages',\n  '- Your branding only \\u2014 the \"Powered by Streamline\" comes off',\n  '',\n  'From R2,500 depending on what you want \\u2014 or the full setup (proper website, online store, bookings, payments, all the automation wired in) from around R15-20k, live in about a week.',\n  '',\n  'I\\'ve got 2 spots open next week \\u2014 want a quick 15-min chat to map it out?',\n  '',\n  '\\u2014 Christiaan from Streamline'\n].join('\\n');\n\nreturn [{ json: { prospect_id: e.prospect_id, business_name: biz, draft_text: text } }];"
       },
       "id": "b1a10000-0000-4000-8000-00000000f004",
-      "name": "Claude Draft",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [680, -80]
     },
     {
@@ -94,7 +81,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Get Engagement').item.json[0].prospect_id) }},\n  \"sequence_step\": 99,\n  \"draft_text\": {{ JSON.stringify($json.content[0].text) }},\n  \"status\": \"pending_approval\"\n}",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Build Message').item.json.prospect_id) }},\n  \"sequence_step\": 99,\n  \"draft_text\": {{ JSON.stringify($('Build Message').item.json.draft_text) }},\n  \"status\": \"pending_approval\"\n}",
         "options": {}
       },
       "id": "b1a10000-0000-4000-8000-00000000f005",
@@ -106,7 +93,7 @@
     {
       "parameters": {
         "chatId": "SET_TELEGRAM_CHAT_ID",
-        "text": "=🔥 BOOKING-TRIGGERED follow-up drafted for {{ $('Get Engagement').item.json[0].business_name }} — awaiting approval in the queue.\n\n{{ $('Claude Draft').item.json.content[0].text }}",
+        "text": "=🔥 BOOKING-TRIGGERED upsell drafted for {{ $('Build Message').item.json.business_name }}:\n\n{{ $('Build Message').item.json.draft_text }}\n\nApprove: approve_{{ ($json[0] || $json).id }} / kill_{{ ($json[0] || $json).id }}",
         "additionalFields": {}
       },
       "id": "b1a10000-0000-4000-8000-00000000f006",
@@ -119,8 +106,8 @@
   "connections": {
     "Booking Webhook": { "main": [[{ "node": "Get Engagement", "type": "main", "index": 0 }]] },
     "Get Engagement": { "main": [[{ "node": "Has Bookings?", "type": "main", "index": 0 }]] },
-    "Has Bookings?": { "main": [[{ "node": "Claude Draft", "type": "main", "index": 0 }], []] },
-    "Claude Draft": { "main": [[{ "node": "Insert Message", "type": "main", "index": 0 }]] },
+    "Has Bookings?": { "main": [[{ "node": "Build Message", "type": "main", "index": 0 }], []] },
+    "Build Message": { "main": [[{ "node": "Insert Message", "type": "main", "index": 0 }]] },
     "Insert Message": { "main": [[{ "node": "Telegram Alert", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" }
