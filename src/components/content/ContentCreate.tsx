@@ -21,9 +21,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { ContentType, ContentPillar, Platform, ContentIdea, ContentPost } from "@/types/content";
-import { isBufferConfigured, scheduleToAllPlatforms, postNow } from "@/services/bufferService";
+import { ContentType, ContentPillar, Platform, ContentIdea, ContentPost, PostStatus } from "@/types/content";
+import { isBufferConfigured, pushToBuffer } from "@/services/bufferService";
 import { generateCaptions as generateCaptionsFromAI } from "@/services/captionService";
+import { uploadManyToCloudinary, isCloudinaryConfigured } from "@/services/cloudinaryService";
 
 const PILLARS: ContentPillar[] = [
   "Build in Public",
@@ -66,6 +67,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
   const [scheduledFor, setScheduledFor] = useState(initialData?.scheduled_for || "");
   const [notes, setNotes] = useState("");
   const [captions, setCaptions] = useState<{ [key in Platform]?: string }>({});
+  const [captionMaster, setCaptionMaster] = useState("");
 
   useEffect(() => {
     if (initialData) {
@@ -90,6 +92,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
       if (editingPost.platforms) setPlatforms(editingPost.platforms);
       if (editingPost.brief) setBrief(editingPost.brief);
       if (editingPost.captions) setCaptions(editingPost.captions);
+      if (editingPost.caption_master) setCaptionMaster(editingPost.caption_master);
       if (editingPost.hashtags) setHashtags(editingPost.hashtags);
       if (editingPost.first_comment) setFirstComment(editingPost.first_comment);
       if (editingPost.media_urls) setMediaUrls(editingPost.media_urls);
@@ -117,6 +120,11 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
   // Buffer warning if not configured
   const bufferConfigured = isBufferConfigured();
 
+  // In-app AI captions are OFF by default — captions come from the folder .txt
+  // files (written via Claude Code), so we don't pay for the Anthropic API.
+  // Flip VITE_ENABLE_AI_CAPTIONS=true to re-enable the Generate buttons.
+  const aiCaptionsEnabled = import.meta.env.VITE_ENABLE_AI_CAPTIONS === "true";
+
   const handleGenerateCaptions = async () => {
     if (!brief || platforms.length === 0) return;
     setIsGenerating(true);
@@ -130,6 +138,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
         facebook: result.facebook || "",
         linkedin: result.linkedin || "",
       });
+      setCaptionMaster(result.master || "");
       setHashtags(result.hashtags || "");
       setFirstComment(result.first_comment || "");
       setCaptionsGenerated(true);
@@ -162,7 +171,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
     }
   };
 
-  const savePost = async (status: "idea" | "ready" | "scheduled" | "posted") => {
+  const savePost = async (status: PostStatus) => {
     if (!title) {
       alert("Please provide a title for the post");
       return;
@@ -175,6 +184,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
         content_pillar: pillar,
         platforms,
         brief,
+        caption_master: captionMaster || null,
         captions,
         hashtags,
         first_comment: firstComment,
@@ -182,7 +192,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
         scheduled_for: scheduledFor || null,
         notes,
         status,
-        posted_at: status === "posted" ? new Date().toISOString() : null,
+        posted_at: status === "published" ? new Date().toISOString() : null,
       });
 
       if (error) throw error;
@@ -203,6 +213,12 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
     }
     if (platforms.length === 0) {
       return "Please select at least one platform";
+    }
+    if (mediaUrls.length === 0) {
+      return "Add at least one image or video — Buffer posts must include media";
+    }
+    if (mediaUrls.some((u) => u.startsWith("blob:"))) {
+      return "Media isn't hosted yet — wait for the Cloudinary upload to finish before scheduling";
     }
     if (!scheduledFor) {
       return "Please set a schedule date and time";
@@ -230,7 +246,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
     setScheduleSuccess(null);
 
     try {
-      // First save the post to Supabase
+      // Save the row first (with media + per-platform captions), then push it.
       const { data: postData, error: insertError } = await supabase
         .from("content_posts")
         .insert({
@@ -239,56 +255,33 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
           content_pillar: pillar,
           platforms,
           brief,
+          caption_master: captionMaster || null,
           captions,
           hashtags,
           first_comment: firstComment,
           media_urls: mediaUrls,
           scheduled_for: scheduledFor,
           notes,
-          status: "scheduled",
+          status: "queued",
         })
         .select("id")
         .single();
 
       if (insertError) throw insertError;
 
-      // Schedule to Buffer
-      const result = await scheduleToAllPlatforms(
-        platforms,
-        captions as { instagram?: string; facebook?: string; linkedin?: string },
-        scheduledFor,
-        mediaUrls
-      );
+      // The proxy reads the row, builds the media-capable Buffer mutation
+      // server-side, and writes status + buffer ids back to the row.
+      const result = await pushToBuffer(postData.id);
+      const channels = Object.keys(result.buffer_post_ids).join(", ");
 
-      // Build buffer_post_ids object
-      const bufferPostIds: Record<string, string> = {};
-      result.success.forEach((s) => {
-        bufferPostIds[s.platform] = s.bufferId;
-      });
-
-      // Update with Buffer post IDs
-      await supabase
-        .from("content_posts")
-        .update({
-          status: "scheduled",
-          scheduled_for: scheduledFor,
-          buffer_post_ids: bufferPostIds,
-        })
-        .eq("id", postData.id);
-
-      if (result.failed.length === 0) {
-        // All succeeded
-        setScheduleSuccess(`Scheduled to ${platforms.join(", ")}`);
+      if (result.status === "scheduled") {
+        setScheduleSuccess(`Scheduled to ${channels || platforms.join(", ")}`);
         clearForm();
-      } else if (result.success.length > 0) {
-        // Partial success
-        const succeededPlatforms = result.success.map((s) => s.platform).join(", ");
-        const failedPlatforms = result.failed.map((f) => f.platform).join(", ");
-        setScheduleSuccess(`Scheduled to: ${succeededPlatforms}`);
-        setScheduleError(`Failed for: ${failedPlatforms}`);
+      } else if (result.status === "manual") {
+        setScheduleSuccess(`Sent as Buffer reminders (finish in the Buffer app): ${channels}`);
+        if (result.errors.length) setScheduleError(result.errors.join(" | "));
       } else {
-        // Total failure
-        setScheduleError(result.failed[0]?.error || "Failed to schedule to Buffer");
+        setScheduleError(result.errors.join(" | ") || "Failed to schedule to Buffer");
       }
     } catch (error: unknown) {
       console.error("Scheduling failed:", error);
@@ -313,7 +306,8 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
     setScheduleSuccess(null);
 
     try {
-      // First save the post to Supabase
+      // "Post now" = schedule ~2 min out so Buffer publishes almost immediately.
+      const dueAt = new Date(Date.now() + 120000).toISOString();
       const { data: postData, error: insertError } = await supabase
         .from("content_posts")
         .insert({
@@ -322,51 +316,31 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
           content_pillar: pillar,
           platforms,
           brief,
+          caption_master: captionMaster || null,
           captions,
           hashtags,
           first_comment: firstComment,
           media_urls: mediaUrls,
-          scheduled_for: new Date().toISOString(),
+          scheduled_for: dueAt,
           notes,
-          status: "scheduled",
+          status: "queued",
         })
         .select("id")
         .single();
 
       if (insertError) throw insertError;
 
-      // Schedule to Buffer immediately
-      const result = await postNow(
-        platforms,
-        captions as { instagram?: string; facebook?: string; linkedin?: string },
-        mediaUrls
-      );
+      const result = await pushToBuffer(postData.id);
+      const channels = Object.keys(result.buffer_post_ids).join(", ");
 
-      // Build buffer_post_ids object
-      const bufferPostIds: Record<string, string> = {};
-      result.success.forEach((s) => {
-        bufferPostIds[s.platform] = s.bufferId;
-      });
-
-      // Update with Buffer post IDs
-      await supabase
-        .from("content_posts")
-        .update({
-          status: "scheduled",
-          buffer_post_ids: bufferPostIds,
-        })
-        .eq("id", postData.id);
-
-      if (result.failed.length === 0) {
-        setScheduleSuccess(`Posted to ${platforms.join(", ")} (will go live in ~2 mins)`);
+      if (result.status === "scheduled") {
+        setScheduleSuccess(`Posting to ${channels || platforms.join(", ")} (live in ~2 mins)`);
         clearForm();
-      } else if (result.success.length > 0) {
-        const succeededPlatforms = result.success.map((s) => s.platform).join(", ");
-        const failedPlatforms = result.failed.map((f) => f.platform).join(", ");
-        setScheduleSuccess(`Posted to: ${succeededPlatforms}`);
-        setScheduleError(`Failed for: ${failedPlatforms}`);
+      } else if (result.status === "manual") {
+        setScheduleSuccess(`Sent as Buffer reminders (finish in the Buffer app): ${channels}`);
+        if (result.errors.length) setScheduleError(result.errors.join(" | "));
       } else {
-        setScheduleError(result.failed[0]?.error || "Failed to post to Buffer");
+        setScheduleError(result.errors.join(" | ") || "Failed to post to Buffer");
       }
     } catch (error: unknown) {
       console.error("Post now failed:", error);
@@ -382,6 +356,7 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
     setTitle("");
     setBrief("");
     setCaptions({});
+    setCaptionMaster("");
     setHashtags("");
     setFirstComment("");
     setMediaUrls([]);
@@ -391,15 +366,25 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
+
+    if (!isCloudinaryConfigured()) {
+      alert("Cloudinary not configured — add VITE_CLOUDINARY_UPLOAD_PRESET (unsigned) to .env, or use the ingest script.");
+      return;
+    }
 
     setUploading(true);
-    // Simulate upload for now as we don't have a storage hook
-    setTimeout(() => {
-      const urls = Array.from(files).map((f) => URL.createObjectURL(f));
+    try {
+      // Real upload to Cloudinary → public secure_urls (ordered).
+      const urls = await uploadManyToCloudinary(Array.from(files));
       setMediaUrls((prev) => [...prev, ...urls]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      alert(`Upload failed: ${message}`);
+    } finally {
       setUploading(false);
-    }, 1000);
+      e.target.value = ""; // allow re-selecting the same file
+    }
   };
 
   return (
@@ -497,8 +482,8 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
             {/* Media Upload - Preview Only */}
             <div>
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Media (Preview Only)</label>
-                <span className="text-[10px] text-zinc-600">Add images in Buffer after scheduling</span>
+                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Media</label>
+                <span className="text-[10px] text-zinc-600">Uploads to Cloudinary · order = carousel order</span>
               </div>
               <div className="mt-1.5 flex flex-wrap gap-2">
                 {mediaUrls.map((url, idx) => (
@@ -532,24 +517,64 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
               />
             </div>
 
-            {/* Generate Button */}
-            <button
-              onClick={handleGenerateCaptions}
-              disabled={isGenerating || !brief}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-purple text-white rounded-xl text-sm font-bold hover:bg-purple/90 transition shadow-lg shadow-purple/20 disabled:opacity-50"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating Captions...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Generate Captions
-                </>
-              )}
-            </button>
+            {/* Generate Button (hidden unless VITE_ENABLE_AI_CAPTIONS=true) */}
+            {aiCaptionsEnabled && (
+              <button
+                onClick={handleGenerateCaptions}
+                disabled={isGenerating || !brief}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-purple text-white rounded-xl text-sm font-bold hover:bg-purple/90 transition shadow-lg shadow-purple/20 disabled:opacity-50"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating Captions...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Generate Captions
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Captions — master + per-platform (editable) */}
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Master Caption</label>
+                <textarea
+                  value={captionMaster}
+                  onChange={(e) => setCaptionMaster(e.target.value)}
+                  rows={3}
+                  placeholder="The core caption. Per-platform versions below can override this."
+                  className="mt-1.5 w-full bg-base border border-border rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple/50 transition resize-none"
+                />
+              </div>
+              {platforms.map((p) => (
+                <div key={p}>
+                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider capitalize">{p} caption</label>
+                  <div className="mt-1.5 flex gap-2">
+                    <textarea
+                      value={captions[p] || ""}
+                      onChange={(e) => setCaptions((prev) => ({ ...prev, [p]: e.target.value }))}
+                      rows={3}
+                      placeholder={`Caption for ${p}…`}
+                      className="w-full bg-base border border-border rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple/50 transition resize-none"
+                    />
+                    {aiCaptionsEnabled && (
+                      <button
+                        onClick={() => handleRegenerateCaption(p)}
+                        disabled={!brief || regeneratingPlatform === p}
+                        title={`Regenerate ${p} caption`}
+                        className="shrink-0 self-start rounded-xl border border-border bg-base px-2.5 py-2 text-zinc-400 hover:text-white transition disabled:opacity-50"
+                      >
+                        {regeneratingPlatform === p ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
 
             {/* Hashtags & First Comment */}
             <div className="grid grid-cols-2 gap-4">
@@ -620,20 +645,20 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3 pt-4">
               <button
-                onClick={() => savePost("idea")}
+                onClick={() => savePost("draft")}
                 disabled={isSaving || isScheduling}
                 className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-white/5 text-zinc-400 rounded-xl text-sm font-semibold hover:bg-white/10 hover:text-white transition disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
-                Save as Idea
+                Save as Draft
               </button>
               <button
-                onClick={() => savePost("ready")}
+                onClick={() => savePost("queued")}
                 disabled={isSaving || isScheduling}
                 className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-blue-500/10 text-blue-400 rounded-xl text-sm font-semibold hover:bg-blue-500/20 transition disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                Save as Ready
+                Save as Queued
               </button>
               <button
                 onClick={handleSchedule}
@@ -679,12 +704,12 @@ export default function ContentCreate({ initialData, editingPost }: ContentCreat
                 Open Buffer
               </a>
               <button
-                onClick={() => savePost("posted")}
+                onClick={() => savePost("published")}
                 disabled={isSaving || isScheduling}
                 className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl text-sm font-semibold hover:bg-emerald-500/20 transition disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                Mark Posted
+                Mark Published
               </button>
             </div>
           </div>

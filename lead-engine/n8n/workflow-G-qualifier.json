@@ -1,0 +1,47 @@
+{
+  "name": "Lead Engine — G: Lead Qualifier",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "lead-engine-qualify", "options": {} },
+      "id": "g7a10000-0000-4000-8000-00000000g001",
+      "name": "Qualify Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lead-engine-qualify"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?select=id,business_name,website&qualified_at=is.null&limit=100",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "g7a10000-0000-4000-8000-00000000g002",
+      "name": "Get Unqualified",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lead qualifier — fetch each site (fail-safe), classify, update prospect.\n// Keep this logic in sync with ../qualifier/classify.mjs (the tested copy).\nconst SUPABASE_URL = 'SET_SUPABASE_URL';\nconst KEY = 'SET_SUPABASE_SERVICE_KEY';\nconst UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';\nconst SOCIAL = ['facebook.com','m.facebook.com','fb.me','fb.com','instagram.com','instagr.am','linktr.ee','linktree.com','beacons.ai','linkin.bio','msha.ke','carrd.co','taplink.cc','lnk.bio','campsite.bio','wa.me','api.whatsapp.com','tiktok.com','x.com','twitter.com'];\nconst SIGS = [\n  ['Fresha',[/fresha\\.com/i,/\\bfresha\\b/i]],\n  ['Booksy',[/booksy\\.com/i,/\\bbooksy\\b/i]],\n  ['Treatwell',[/treatwell\\./i,/\\btreatwell\\b/i]],\n  ['Acuity Scheduling',[/acuityscheduling\\.com/i,/\\bacuity\\b/i]],\n  ['Calendly',[/calendly\\.com/i]],\n  ['Setmore',[/setmore\\.com/i,/\\bsetmore\\b/i]],\n  ['SimplyBook.me',[/simplybook\\.(me|it)/i,/\\bsimplybook\\b/i]],\n  ['GlossGenius',[/glossgenius\\.com/i,/\\bglossgenius\\b/i]],\n  ['Vagaro',[/vagaro\\.com/i,/\\bvagaro\\b/i]],\n  ['Timely',[/gettimely\\.com/i,/timelyapp\\.com/i]],\n  ['Schedulicity',[/schedulicity\\.com/i,/\\bschedulicity\\b/i]],\n  ['Picktime',[/picktime\\.com/i,/\\bpicktime\\b/i]],\n  ['10to8',[/10to8\\.com/i,/\\b10to8\\b/i]],\n  ['vcita',[/vcita\\.com/i,/\\bvcita\\b/i]],\n  ['Square Appointments',[/squareup\\.com\\/appointments/i,/book\\.squareup\\.com/i,/square appointments/i]]\n];\nfunction hostOf(u){ if(!u) return ''; let s=String(u).trim(); if(!/^https?:\\/\\//i.test(s)) s='http://'+s; try { return new URL(s).hostname.toLowerCase().replace(/^www\\./,''); } catch(e){ return ''; } }\nfunction isSocial(u){ const h=hostOf(u); return !!h && SOCIAL.some(s=>h===s||h.endsWith('.'+s)); }\nfunction detect(html){ const t=String(html||''); for(const pair of SIGS){ if(pair[1].some(re=>re.test(t))) return pair[0]; } return null; }\nfunction classify(website,html,err){\n  if(!website||!String(website).trim()) return {has_website:false,has_booking_system:false,booking_platform:null,lead_temp:'hot',reason:'no_website'};\n  if(isSocial(website)) return {has_website:false,has_booking_system:false,booking_platform:null,lead_temp:'hot',reason:'social_only'};\n  if(err) return {has_website:true,has_booking_system:null,booking_platform:null,lead_temp:'unknown',reason:'fetch_error'};\n  const p=detect(html);\n  if(p) return {has_website:true,has_booking_system:true,booking_platform:p,lead_temp:'cold',reason:'booking_found'};\n  return {has_website:true,has_booking_system:false,booking_platform:null,lead_temp:'warm',reason:'no_booking'};\n}\nconst raw = $input.all().map(i=>i.json);\nconst items = (raw.length===1 && Array.isArray(raw[0])) ? raw[0] : raw;\nconst out=[];\nfor(const p of items){\n  let res, hitNet=false;\n  if(!p.website||!String(p.website).trim()||isSocial(p.website)){ res=classify(p.website); }\n  else {\n    let html='', err=false, url=String(p.website).trim();\n    if(!/^https?:\\/\\//i.test(url)) url='https://'+url;\n    try { const r=await this.helpers.httpRequest({ url, timeout:8000, headers:{ 'User-Agent':UA, Accept:'text/html,*/*' } }); html = (typeof r==='string') ? r : JSON.stringify(r); } catch(e){ err=true; }\n    res=classify(p.website, html, err); hitNet=true;\n  }\n  try {\n    await this.helpers.httpRequest({ method:'PATCH', url: SUPABASE_URL+'/rest/v1/prospects?id=eq.'+p.id, headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Profile':'streamline_hq', 'Content-Type':'application/json', Prefer:'return=minimal' }, body:{ has_website:res.has_website, has_booking_system:res.has_booking_system, booking_platform:res.booking_platform, lead_temp:res.lead_temp, qualified_at:new Date().toISOString() }, json:true });\n  } catch(e){}\n  out.push({ json: { id:p.id, business_name:p.business_name, lead_temp:res.lead_temp, booking_platform:res.booking_platform, reason:res.reason } });\n  if(hitNet) await new Promise(r=>setTimeout(r,1000));\n}\nreturn out;"
+      },
+      "id": "g7a10000-0000-4000-8000-00000000g003",
+      "name": "Qualify All",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    }
+  ],
+  "connections": {
+    "Qualify Webhook": { "main": [[{ "node": "Get Unqualified", "type": "main", "index": 0 }]] },
+    "Get Unqualified": { "main": [[{ "node": "Qualify All", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

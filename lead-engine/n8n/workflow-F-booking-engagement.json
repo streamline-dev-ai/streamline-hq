@@ -1,12 +1,8 @@
 {
-  "name": "Lead Engine — F: Booking → Hot Follow-up",
+  "name": "Lead Engine — F: Booking → Hot Upgrade (send-link)",
   "nodes": [
     {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "lead-engine-booking",
-        "options": {}
-      },
+      "parameters": { "httpMethod": "POST", "path": "lead-engine-booking", "options": {} },
       "id": "b1a10000-0000-4000-8000-00000000f001",
       "name": "Booking Webhook",
       "type": "n8n-nodes-base.webhook",
@@ -19,13 +15,11 @@
         "method": "GET",
         "url": "=SET_SUPABASE_URL/rest/v1/prospect_engagement?slug=eq.{{ $json.body.slug }}&select=*",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
-            { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
-            { "name": "Accept-Profile", "value": "streamline_hq" }
-          ]
-        },
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
         "options": {}
       },
       "id": "b1a10000-0000-4000-8000-00000000f002",
@@ -40,11 +34,7 @@
           "options": { "caseSensitive": true, "version": 2 },
           "combinator": "and",
           "conditions": [
-            {
-              "leftValue": "={{ ($json[0] || $json).bookings_count }}",
-              "rightValue": 0,
-              "operator": { "type": "number", "operation": "gt" }
-            }
+            { "leftValue": "={{ ($json[0] || $json).bookings_count }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }
           ]
         },
         "options": {}
@@ -57,58 +47,99 @@
     },
     {
       "parameters": {
-        "jsCode": "// FIXED template (deterministic, no AI, no drift). Booking-triggered upsell.\n// Bullets MUST match the admin app's locked premium cards.\nlet e = $('Get Engagement').item.json;\nif (Array.isArray(e)) e = e[0];\ne = e || {};\n\nconst who = (e.owner_first_name && e.owner_first_name.trim()) ? e.owner_first_name.trim() : '';\nconst biz = e.business_name || 'your salon';\nconst hasDetail = e.latest_customer_first_name && e.latest_service_name;\n\nconst bookingLine = hasDetail\n  ? biz + ' just took a booking off the free page \\u2014 ' + e.latest_customer_first_name + ' for ' + e.latest_service_name + (e.latest_booking_date_human ? ' on ' + e.latest_booking_date_human : '') + '. That\\'s the whole idea.'\n  : biz + ' just took a booking straight off the free page I set up. That\\'s the whole idea.';\n\nconst text = [\n  (who ? who + ', quick one.' : 'Quick one.'),\n  '',\n  bookingLine,\n  '',\n  'Now imagine the full setup:',\n  '- Take deposits so clients can\\'t no-show',\n  '- Automatic WhatsApp + email reminders before every appointment',\n  '- Your own domain instead of the shared link',\n  '- An online store for products, vouchers and packages',\n  '- Your branding only \\u2014 the \"Powered by Streamline\" comes off',\n  '',\n  'From R2,500 depending on what you want \\u2014 or the full setup (proper website, online store, bookings, payments, all the automation wired in) from around R15-20k, live in about a week.',\n  '',\n  'I\\'ve got 2 spots open next week \\u2014 want a quick 15-min chat to map it out?',\n  '',\n  '\\u2014 Christiaan from Streamline'\n].join('\\n');\n\nreturn [{ json: { prospect_id: e.prospect_id, business_name: biz, draft_text: text } }];"
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ ($('Get Engagement').item.json[0] || $('Get Engagement').item.json).prospect_id }}&select=*&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
       },
       "id": "b1a10000-0000-4000-8000-00000000f004",
-      "name": "Build Message",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [680, -80]
+      "name": "Get Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -80]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=SET_SUPABASE_URL/rest/v1/messages",
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/suppression_list?prospect_id=eq.{{ ($('Get Engagement').item.json[0] || $('Get Engagement').item.json).prospect_id }}&select=id&limit=1",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
-            { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
-            { "name": "Content-Profile", "value": "streamline_hq" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=representation" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Build Message').item.json.prospect_id) }},\n  \"sequence_step\": 99,\n  \"draft_text\": {{ JSON.stringify($('Build Message').item.json.draft_text) }},\n  \"status\": \"pending_approval\"\n}",
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
         "options": {}
       },
       "id": "b1a10000-0000-4000-8000-00000000f005",
-      "name": "Insert Message",
+      "name": "Check Suppression",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, -80]
+      "position": [880, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// FIXED template (deterministic, no AI). Booking-triggered upgrade pitch with\n// the tiered offer + 7-day guarantee. Builds the tap-to-send wa.me link.\nlet e = $('Get Engagement').item.json; if (Array.isArray(e)) e = e[0]; e = e || {};\nlet p = $('Get Prospect').item.json; if (Array.isArray(p)) p = p[0] || {};\nlet supp = $('Check Suppression').item.json; if (!Array.isArray(supp)) supp = supp ? [supp] : [];\n\nconst who = (e.owner_first_name && e.owner_first_name.trim()) ? e.owner_first_name.trim() : '';\nconst biz = e.business_name || 'your salon';\nconst hasDetail = e.latest_customer_first_name && e.latest_service_name;\nfunction waDigits(raw){ let d = String(raw||'').replace(/\\D/g,''); if (d.startsWith('0')) d = '27' + d.slice(1); if (d.length === 9) d = '27' + d; return d; }\nconst phone = waDigits(p.whatsapp_e164 || p.phone_e164 || '');\nconst suppressed = supp.length > 0 || p.popia_optout === true;\n\nconst bookingLine = hasDetail\n  ? biz + ' just took a booking off the free page — ' + e.latest_customer_first_name + ' for ' + e.latest_service_name + (e.latest_booking_date_human ? ' on ' + e.latest_booking_date_human : '') + '. That\\'s the whole idea.'\n  : biz + ' just took a booking straight off the free page I set up. That\\'s the whole idea.';\n\nconst text = [\n  (who ? who + ', quick one.' : 'Quick one.'),\n  '',\n  bookingLine,\n  '',\n  'That\\'s the free version working. Here\\'s what the paid setup adds:',\n  '',\n  'Booking Booster — from R2,500 once-off or R699/mo: keep the free page plus deposits, auto WhatsApp reminders, your own domain, and Streamline branding removed.',\n  '',\n  'Client Magnet (most popular) — from R12,000 + R1,199/mo: pro site and booking system with deposits, reminders, your own domain and lead capture. Live in a week.',\n  '',\n  'Business Accelerator — R25,000 + R2,499/mo: full site and store, automated bookings, deposits, reminders, customer database, rebooking, analytics, and monthly improvement.',\n  '',\n  'My guarantee: your upgraded booking system — deposits, reminders, your own domain — is live and taking real bookings within 7 days, or I keep working free until it is. I guarantee the system works; your bookings are your magic.',\n  '',\n  'Want a quick 15-min chat to map it out?',\n  '',\n  '— Christiaan from Streamline'\n].join('\\n');\n\nconst waLink = (!suppressed && phone) ? ('https://wa.me/' + phone + '?text=' + encodeURIComponent(text)) : '';\nconst summary = suppressed\n  ? ('🔥 ' + biz + ' booked, but it\\'s on the suppression list / opted out — NOT generating an upgrade link.')\n  : ['🔥 BOOKING-TRIGGERED upgrade ready for ' + biz + (phone ? ' (+' + phone + ')' : ' (NO PHONE)'), '', 'Tap to send the upgrade pitch:', '', text].join('\\n');\n\nreturn [{ json: { prospect_id: e.prospect_id, business_name: biz, draft_text: text, waLink, summary, suppressed, phone } }];"
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f006",
+      "name": "Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, -80]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.suppressed }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ] },
+        "options": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f007",
+      "name": "Suppressed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, -80]
     },
     {
       "parameters": {
         "chatId": "SET_TELEGRAM_CHAT_ID",
-        "text": "=🔥 BOOKING-TRIGGERED upsell drafted for {{ $('Build Message').item.json.business_name }}:\n\n{{ $('Build Message').item.json.draft_text }}\n\nApprove: approve_{{ ($json[0] || $json).id }} / kill_{{ ($json[0] || $json).id }}",
+        "text": "={{ $json.summary }}",
         "additionalFields": {}
       },
-      "id": "b1a10000-0000-4000-8000-00000000f006",
-      "name": "Telegram Alert",
+      "id": "b1a10000-0000-4000-8000-00000000f008",
+      "name": "Notify Skipped",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1120, -80]
+      "position": [1540, -200]
+    },
+    {
+      "parameters": {
+        "chatId": "SET_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.summary }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": { "rows": [ { "row": { "buttons": [ { "text": "📲 Open WhatsApp & send upgrade", "additionalFields": { "url": "={{ $json.waLink }}" } } ] } } ] },
+        "additionalFields": {}
+      },
+      "id": "b1a10000-0000-4000-8000-00000000f009",
+      "name": "Send Upgrade Link",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1540, 40]
     }
   ],
   "connections": {
     "Booking Webhook": { "main": [[{ "node": "Get Engagement", "type": "main", "index": 0 }]] },
     "Get Engagement": { "main": [[{ "node": "Has Bookings?", "type": "main", "index": 0 }]] },
-    "Has Bookings?": { "main": [[{ "node": "Build Message", "type": "main", "index": 0 }], []] },
-    "Build Message": { "main": [[{ "node": "Insert Message", "type": "main", "index": 0 }]] },
-    "Insert Message": { "main": [[{ "node": "Telegram Alert", "type": "main", "index": 0 }]] }
+    "Has Bookings?": { "main": [[{ "node": "Get Prospect", "type": "main", "index": 0 }], []] },
+    "Get Prospect": { "main": [[{ "node": "Check Suppression", "type": "main", "index": 0 }]] },
+    "Check Suppression": { "main": [[{ "node": "Build Message", "type": "main", "index": 0 }]] },
+    "Build Message": { "main": [[{ "node": "Suppressed?", "type": "main", "index": 0 }]] },
+    "Suppressed?": { "main": [
+      [{ "node": "Notify Skipped", "type": "main", "index": 0 }],
+      [{ "node": "Send Upgrade Link", "type": "main", "index": 0 }]
+    ] }
   },
   "settings": { "executionOrder": "v1" }
 }

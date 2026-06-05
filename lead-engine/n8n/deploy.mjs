@@ -11,11 +11,11 @@
 //   $env:SUPABASE_SERVICE_KEY="<unified project service_role key>"
 //   $env:ANTHROPIC_API_KEY="<key>"
 //   $env:TELEGRAM_CHAT_ID="<your chat id>"
-//   $env:EVOLUTION_URL="..."; $env:EVOLUTION_INSTANCE="..."; $env:EVOLUTION_API_KEY="..."
-//   node deploy.mjs            # import/upsert both workflows
+//   node deploy.mjs            # import/upsert the active workflows
 //   node deploy.mjs --test-f   # also fire a SAFE test of Workflow F
 //
-// Safe by design: never activates the send-loop, never sends WhatsApp.
+// Safe by design: nothing here sends WhatsApp. Outbound is fully manual —
+// each workflow ends with a tap-to-send wa.me link delivered to Telegram.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -32,24 +32,22 @@ const SUBS = {
   SET_ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   SET_APIFY_TOKEN: process.env.APIFY_TOKEN,
   SET_TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
-  SET_EVOLUTION_URL: process.env.EVOLUTION_URL,
-  SET_EVOLUTION_INSTANCE: process.env.EVOLUTION_INSTANCE,
-  SET_EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY,
 };
 
-// Order matters: B2 must import before E so E's "Call B2" node can be
+// Order matters: B2 must import before C so C's "Run B2 Build" node can be
 // auto-wired to B2's real workflow id (see B2_NAME handling below).
+// Evolution send-loop (D) + auto reply-handler (E) are RETIRED — see ../n8n/_archived.
+// Outbound is now manual: every workflow ends with a tap-to-send wa.me link in Telegram.
 const FILES = [
   "workflow-A-lead-intake.json",
-  "workflow-B-enrich-and-draft.json",
   "workflow-B2-build-deliver.json",
-  "workflow-C-approval-handler.json",
-  "workflow-D-send-loop.json",
-  "workflow-E-reply-handler.json",
+  "workflow-B-control-card.json",
+  "workflow-C-control-handler.json",
   "workflow-F-booking-engagement.json",
+  "workflow-G-qualifier.json",
 ];
 
-const B2_NAME = "Lead Engine — B2: Build & Deliver";
+const B2_NAME = "Lead Engine — B2: Build & Deliver (send-link)";
 
 function die(msg) {
   console.error(`\n❌ ${msg}`);
@@ -131,14 +129,15 @@ function applySubs(raw) {
   }
 
   console.log(
-    "\nNext (in n8n UI): attach a Telegram credential to the Telegram node," +
-      " review each node, then Activate Workflow F.\n" +
-      "Do NOT activate the send-loop until you've approved going live.",
+    "\nNext (in n8n UI): attach a Telegram credential to every Telegram node," +
+      " confirm C's 'Run B2 Build' points at the B2 workflow, review each node," +
+      " then Activate B (control card), C (control handler) and F.\n" +
+      "Nothing sends WhatsApp — you send manually via the wa.me links in Telegram.",
   );
 
   if (TEST_F) {
     console.log("\n--test-f: posting a SAFE fake booking to Workflow F's TEST webhook…");
-    console.log("(F only drafts + Telegram-alerts + inserts pending_approval — no WhatsApp is sent.)");
+    console.log("(F only drafts + sends a tap-to-send wa.me link to Telegram — no WhatsApp is sent.)");
     const r = await fetch(`${N8N_URL}/webhook-test/lead-engine-booking`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

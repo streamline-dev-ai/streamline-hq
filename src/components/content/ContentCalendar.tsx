@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List, Send, Trash2, Edit3, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Layers, PlayCircle, Image as ImageIcon, Layout, List, Send, Trash2, Edit3, ExternalLink, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { ContentPost, ContentStatus } from "@/types/content";
+import { ContentPost, PostStatus, POST_STATUSES, POST_STATUS_META, normalizeStatus } from "@/types/content";
+import { pushToBuffer } from "@/services/bufferService";
 import Badge from "@/components/Badge";
 import Modal from "@/components/Modal";
 import { getSaDateString, addDaysToSaYmd } from "@/utils/saDate";
 
-const STATUS_FILTERS: (ContentStatus | "all")[] = ["all", "idea", "ready", "scheduled", "posted"];
+const STATUS_FILTERS: (PostStatus | "all")[] = ["all", ...POST_STATUSES];
 
 interface ContentCalendarProps {
   onNewPost: (date?: string) => void;
@@ -23,11 +24,13 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
   });
 
   const [posts, setPosts] = useState<ContentPost[]>([]);
-  const [filter, setFilter] = useState<ContentStatus | "all">("all");
+  const [filter, setFilter] = useState<PostStatus | "all">("all");
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<ContentPost | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
+  const [pushMsg, setPushMsg] = useState<string | null>(null);
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDaysToSaYmd(currentWeekStart, i));
@@ -54,12 +57,12 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
 
   const filteredPosts = useMemo(() => {
     if (filter === "all") return posts;
-    return posts.filter((p) => p.status === filter);
+    return posts.filter((p) => normalizeStatus(p.status) === filter);
   }, [posts, filter]);
 
   const upcomingPosts = useMemo(() => {
     return posts
-      .filter((p) => p.status === "scheduled" || p.status === "ready")
+      .filter((p) => ["scheduled", "queued", "manual"].includes(normalizeStatus(p.status)))
       .sort((a, b) => new Date(a.scheduled_for!).getTime() - new Date(b.scheduled_for!).getTime())
       .slice(0, 7);
   }, [posts]);
@@ -101,6 +104,30 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
       console.error("Delete error:", err);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Push an existing row to Buffer (media-capable proxy reads the row server-side)
+  const handlePush = async () => {
+    if (!selectedPost || isPushing) return;
+    setIsPushing(true);
+    setPushMsg(null);
+    try {
+      const result = await pushToBuffer(selectedPost.id);
+      const updated: ContentPost = {
+        ...selectedPost,
+        status: result.status as PostStatus,
+        buffer_post_ids: result.buffer_post_ids,
+      };
+      setSelectedPost(updated);
+      setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      if (result.status === "scheduled") setPushMsg("Scheduled to Buffer ✓");
+      else if (result.status === "manual") setPushMsg("Sent as Buffer reminder(s) — finish in the Buffer app");
+      else setPushMsg(result.errors.join(" | ") || "Push failed");
+    } catch (err) {
+      setPushMsg(err instanceof Error ? err.message : "Push failed");
+    } finally {
+      setIsPushing(false);
     }
   };
 
@@ -195,6 +222,7 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
                     key={post.id}
                     onClick={() => {
                       setSelectedPost(post);
+                      setPushMsg(null);
                       setIsModalOpen(true);
                     }}
                     className="group flex flex-col gap-2 rounded-xl border border-border bg-base/50 p-2.5 text-left transition hover:border-purple/50 hover:bg-purple/5"
@@ -222,19 +250,8 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
                     </div>
                     <div className="truncate text-xs font-medium text-zinc-200">{post.title}</div>
                     <div className="flex items-center gap-2">
-                      <Badge
-                        variant={
-                          post.status === "posted"
-                            ? "emerald"
-                            : post.status === "scheduled"
-                            ? "purple"
-                            : post.status === "ready"
-                            ? "blue"
-                            : "zinc"
-                        }
-                        className="w-fit"
-                      >
-                        {post.status}
+                      <Badge variant={POST_STATUS_META[normalizeStatus(post.status)].badge} className="w-fit">
+                        {POST_STATUS_META[normalizeStatus(post.status)].label}
                       </Badge>
                       {post.status === "scheduled" && hasBufferIds(post) && (
                         <div 
@@ -347,16 +364,8 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
               <div>
                 <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Status</label>
                 <div className="mt-1">
-                  <Badge
-                    variant={
-                      selectedPost.status === "posted"
-                        ? "emerald"
-                        : selectedPost.status === "scheduled"
-                        ? "purple"
-                        : "zinc"
-                    }
-                  >
-                    {selectedPost.status}
+                  <Badge variant={POST_STATUS_META[normalizeStatus(selectedPost.status)].badge}>
+                    {POST_STATUS_META[normalizeStatus(selectedPost.status)].label}
                   </Badge>
                 </div>
               </div>
@@ -399,31 +408,36 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
                 <div className="mt-1 text-sm text-zinc-400">{selectedPost.notes}</div>
               </div>
             )}
-            <div className="flex gap-3 pt-4 border-t border-border">
-              {selectedPost.status === "scheduled" && hasBufferIds(selectedPost) && (
+            {selectedPost.error && (
+              <div className="text-sm text-orange rounded-lg bg-orange/10 border border-orange/20 px-3 py-2">{selectedPost.error}</div>
+            )}
+            {pushMsg && (
+              <div className="text-sm text-zinc-200 rounded-lg bg-base border border-border px-3 py-2">{pushMsg}</div>
+            )}
+            <div className="flex flex-wrap gap-3 pt-4 border-t border-border">
+              {(selectedPost.media_urls?.length ?? 0) > 0 ? (
+                <button
+                  onClick={handlePush}
+                  disabled={isPushing}
+                  className="flex-1 min-w-[160px] px-4 py-2.5 bg-[#168eea] text-white rounded-xl text-sm font-semibold hover:bg-[#168eea]/90 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isPushing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {hasBufferIds(selectedPost) ? "Re-push to Buffer" : "Push to Buffer now"}
+                </button>
+              ) : (
                 <a
                   href="https://buffer.com/app/posts/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 px-4 py-2.5 bg-[#168eea] text-white rounded-xl text-sm font-semibold hover:bg-[#168eea]/90 transition flex items-center justify-center gap-2"
+                  className="flex-1 min-w-[160px] px-4 py-2.5 bg-white/5 text-zinc-400 rounded-xl text-sm font-semibold hover:bg-white/10 hover:text-white transition flex items-center justify-center gap-2"
+                  title="This post has no media — add media (Create tab or ingest script) before pushing"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Open in Buffer to add images
-                </a>
-              )}
-              {selectedPost.status === "ready" && !hasBufferIds(selectedPost) && (
-                <a
-                  href="https://buffer.com/app/posts/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 px-4 py-2.5 bg-[#168eea] text-white rounded-xl text-sm font-semibold hover:bg-[#168eea]/90 transition flex items-center justify-center gap-2"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open Buffer
+                  No media — open Buffer
                 </a>
               )}
               <button
-                className="flex-1 px-4 py-2.5 bg-purple text-white rounded-xl text-sm font-semibold hover:bg-purple/90 transition flex items-center justify-center gap-2"
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-purple text-white rounded-xl text-sm font-semibold hover:bg-purple/90 transition flex items-center justify-center gap-2"
                 onClick={() => {
                   if (onEditPost) {
                     onEditPost(selectedPost);
@@ -436,16 +450,14 @@ export default function ContentCalendar({ onNewPost, onEditPost }: ContentCalend
                 <Edit3 className="h-4 w-4" />
                 Edit Post
               </button>
-              {(selectedPost.status === "ready" || selectedPost.status === "scheduled") && (
-                <button
-                  className="px-4 py-2.5 bg-red-500/20 text-red-400 rounded-xl text-sm font-semibold hover:bg-red-500/30 transition flex items-center justify-center gap-2"
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {isDeleting ? "Deleting..." : "Delete"}
-                </button>
-              )}
+              <button
+                className="px-4 py-2.5 bg-red-500/20 text-red-400 rounded-xl text-sm font-semibold hover:bg-red-500/30 transition flex items-center justify-center gap-2"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
               <button
                 className="px-4 py-2.5 bg-white/5 text-zinc-400 rounded-xl text-sm font-semibold hover:bg-white/10 hover:text-white transition"
                 onClick={() => setIsModalOpen(false)}

@@ -1,0 +1,221 @@
+{
+  "name": "Lead Engine — C: Telegram Control Handler",
+  "nodes": [
+    {
+      "parameters": { "updates": ["callback_query"], "additionalFields": {} },
+      "id": "c3a10000-0000-4000-8000-00000000c001",
+      "name": "Telegram Callback",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "webhookId": "lead-engine-control"
+    },
+    {
+      "parameters": {
+        "jsCode": "// callback_data shape: <action>_<prospect_id>. action has no underscores;\n// prospect_id is a uuid (hyphens only), so split on the FIRST underscore.\nconst cb = $input.first().json.callback_query || {};\nconst data = String(cb.data || '');\nconst i = data.indexOf('_');\nconst action = i === -1 ? data : data.slice(0, i);\nconst pid = i === -1 ? '' : data.slice(i + 1);\nconst chatId = cb.message && cb.message.chat ? cb.message.chat.id : null;\nreturn [{ json: { action, pid, chatId, cbId: cb.id } }];"
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c002",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "operation": "answerQuery",
+        "queryId": "={{ $('Parse Callback').item.json.cbId }}",
+        "additionalFields": { "text": "Working on it…" }
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c003",
+      "name": "Ack Tap",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [440, -200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $json.pid }}&select=*&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c004",
+      "name": "Get Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/suppression_list?prospect_id=eq.{{ $('Parse Callback').item.json.pid }}&select=id&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c005",
+      "name": "Check Suppression",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic (temp-0) renderer. Builds the requested message text, the\n// tap-to-send wa.me link, and the routing mode. Refuses if suppressed/opted out.\nconst pc = $('Parse Callback').item.json;\nlet p = $('Get Prospect').item.json; if (Array.isArray(p)) p = p[0] || {};\nlet supp = $('Check Suppression').item.json; if (!Array.isArray(supp)) supp = supp ? [supp] : [];\n\nconst action = pc.action;\nconst first = (p.owner_first_name || '').trim();\nconst who = first || 'there';\nconst biz = p.business_name || 'your salon';\nconst SHOWCASE = 'https://booking-page-beta.vercel.app/?biz=showcase-lash-studio';\n\nfunction waDigits(raw){ let d = String(raw||'').replace(/\\D/g,''); if (d.startsWith('0')) d = '27' + d.slice(1); if (d.length === 9) d = '27' + d; return d; }\nconst phone = waDigits(p.whatsapp_e164 || p.phone_e164 || '');\nconst suppressed = supp.length > 0 || p.popia_optout === true;\n\nconst T = {\n  cola: [\n    'Hi ' + who + \", it's Christiaan from Streamline Automations.\",\n    'I build free online booking pages for salons here in SA, and I\\'d love to set one up for ' + biz + ' at no cost.',\n    'Here\\'s one I made for a lash studio so you can see it: ' + SHOWCASE,\n    'Mind if I send you a quick demo of your own? If you\\'d rather I didn\\'t message again, just reply STOP and I won\\'t.'\n  ].join('\\n'),\n  colb: [\n    'Hi ' + who + \", it's Christiaan from Streamline Automations.\",\n    'Saw you take your bookings by DM and WhatsApp. Want a free page that does it automatically, so clients book themselves and you stop going back and forth?',\n    'Here\\'s one I built for a lash studio: ' + SHOWCASE,\n    'Happy to make one for ' + biz + ' free. Want me to? If you\\'d rather not hear from me, reply STOP and that\\'s the end of it.'\n  ].join('\\n'),\n  day4: [\n    'Hi ' + who + ', Christiaan from Streamline Automations again, no pressure at all.',\n    'Still happy to build ' + biz + ' a free booking page whenever suits you. Just say the word.',\n    'Reply STOP if you\\'d like me to leave it.'\n  ].join('\\n'),\n  day10: [\n    'Hi ' + who + ', last one from me, Christiaan at Streamline Automations.',\n    'If a free booking page for ' + biz + ' is ever useful, I\\'m one message away. All the best either way.',\n    'Reply STOP to opt out.'\n  ].join('\\n')\n};\n\nlet mode = 'blocked';\nlet text = '';\nlet waLink = '';\nif (action === 'optout') { mode = 'optout'; }\nelse if (action === 'build') { mode = suppressed ? 'blocked' : 'build'; }\nelse if (T[action]) {\n  if (suppressed) { mode = 'blocked'; }\n  else if (!phone) { mode = 'nophone'; }\n  else { mode = 'link'; text = T[action]; waLink = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(text); }\n}\n\nlet summary = '';\nif (mode === 'link') {\n  summary = ['Send to: ' + biz + (first ? ' (' + first + ')' : ''), 'Phone: +' + phone, '', 'Tap the button to open WhatsApp with this pre-typed. Review, then hit send:', '', text].join('\\n');\n} else if (mode === 'blocked') {\n  summary = 'Refusing: ' + biz + ' is on the suppression list / has opted out. No send-link generated.';\n} else if (mode === 'nophone') {\n  summary = 'No phone number on file for ' + biz + ' — cannot build a wa.me link.';\n} else if (mode === 'optout') {\n  summary = biz + ' marked dead + opted out. Pending follow-ups cancelled and added to suppression list.';\n} else if (mode === 'build') {\n  summary = 'Building ' + biz + \"'s booking page… delivery send-link will follow.\";\n}\n\nreturn [{ json: { mode, action, pid: pc.pid, chatId: pc.chatId, cbId: pc.cbId, phone, biz, who, text, waLink, summary, reason: 'declined_optout' } }];"
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c006",
+      "name": "Build Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": true, "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.mode }}", "rightValue": "link", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "link" },
+            { "conditions": { "options": { "caseSensitive": true, "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.mode }}", "rightValue": "build", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "build" },
+            { "conditions": { "options": { "caseSensitive": true, "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.mode }}", "rightValue": "optout", "operator": { "type": "string", "operation": "equals" } } ] }, "outputKey": "optout" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c007",
+      "name": "Route Mode",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Build Reply').item.json.chatId }}",
+        "text": "={{ $('Build Reply').item.json.summary }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": { "rows": [ { "row": { "buttons": [ { "text": "📲 Open WhatsApp & send", "additionalFields": { "url": "={{ $('Build Reply').item.json.waLink }}" } } ] } } ] },
+        "additionalFields": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c008",
+      "name": "Send Link",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1340, -160]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "SET_B2_WORKFLOW_ID",
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c009",
+      "name": "Run B2 Build",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1340, -20]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $('Build Reply').item.json.pid }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"dead\",\n  \"popia_optout\": true,\n  \"popia_optout_at\": {{ JSON.stringify($now.toISO()) }}\n}",
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c010",
+      "name": "Mark Opted Out",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=SET_SUPABASE_URL/rest/v1/suppression_list",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prospect_id\": {{ JSON.stringify($('Build Reply').item.json.pid) }},\n  \"phone_e164\": {{ JSON.stringify($('Build Reply').item.json.phone) }},\n  \"reason\": \"declined_optout\"\n}",
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c011",
+      "name": "Add To Suppression",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 120]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=SET_SUPABASE_URL/rest/v1/messages?prospect_id=eq.{{ $('Build Reply').item.json.pid }}&status=in.(pending_approval,approved,scheduled)",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Content-Profile", "value": "streamline_hq" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"killed\",\n  \"approval_action\": \"optout_cancel\"\n}",
+        "options": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c012",
+      "name": "Cancel Followups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 120]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Build Reply').item.json.chatId }}",
+        "text": "={{ $('Build Reply').item.json.summary }}",
+        "additionalFields": {}
+      },
+      "id": "c3a10000-0000-4000-8000-00000000c013",
+      "name": "Notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1560, -20]
+    }
+  ],
+  "connections": {
+    "Telegram Callback": { "main": [[{ "node": "Parse Callback", "type": "main", "index": 0 }]] },
+    "Parse Callback": { "main": [[{ "node": "Ack Tap", "type": "main", "index": 0 }, { "node": "Get Prospect", "type": "main", "index": 0 }]] },
+    "Get Prospect": { "main": [[{ "node": "Check Suppression", "type": "main", "index": 0 }]] },
+    "Check Suppression": { "main": [[{ "node": "Build Reply", "type": "main", "index": 0 }]] },
+    "Build Reply": { "main": [[{ "node": "Route Mode", "type": "main", "index": 0 }]] },
+    "Route Mode": { "main": [
+      [{ "node": "Send Link", "type": "main", "index": 0 }],
+      [{ "node": "Run B2 Build", "type": "main", "index": 0 }],
+      [{ "node": "Mark Opted Out", "type": "main", "index": 0 }],
+      [{ "node": "Notify", "type": "main", "index": 0 }]
+    ] },
+    "Mark Opted Out": { "main": [[{ "node": "Add To Suppression", "type": "main", "index": 0 }]] },
+    "Add To Suppression": { "main": [[{ "node": "Cancel Followups", "type": "main", "index": 0 }]] },
+    "Cancel Followups": { "main": [[{ "node": "Notify", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

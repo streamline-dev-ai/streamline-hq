@@ -32,9 +32,44 @@ type Niche = {
   target_per_day: number | null;
 };
 
+import type { CompanySettings } from "@/lib/finance";
+
 export default function Settings() {
   const { pushToast } = useToast();
-  const [section, setSection] = useState<"templates" | "niches">("templates");
+  const [section, setSection] = useState<"templates" | "niches" | "business">("templates");
+
+  // ---- Business / invoicing profile (company_settings) ----
+  const [company, setCompany] = useState<CompanySettings | null>(null);
+  const [companyDirty, setCompanyDirty] = useState(false);
+  const [savingCompany, setSavingCompany] = useState(false);
+
+  const loadCompany = useCallback(async () => {
+    const r = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
+    if (!r.error && r.data) setCompany(r.data as CompanySettings);
+  }, []);
+
+  useEffect(() => {
+    void loadCompany();
+  }, [loadCompany]);
+
+  function setCompanyField<K extends keyof CompanySettings>(key: K, value: CompanySettings[K]) {
+    setCompany((c) => (c ? { ...c, [key]: value } : c));
+    setCompanyDirty(true);
+  }
+
+  async function saveCompany() {
+    if (!company) return;
+    setSavingCompany(true);
+    const { id, ...patch } = company;
+    const r = await supabase
+      .from("company_settings")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setSavingCompany(false);
+    if (r.error) return pushToast({ type: "error", title: "Business", message: r.error.message });
+    setCompanyDirty(false);
+    pushToast({ type: "success", title: "Saved", message: "Business details updated" });
+  }
 
   // ---- Outreach templates ----
   const [draft, setDraft] = useState<Record<OutreachTemplateKey, string>>(() =>
@@ -121,10 +156,11 @@ export default function Settings() {
 
       <Segmented
         value={section}
-        onChange={(v) => setSection(v as "templates" | "niches")}
+        onChange={(v) => setSection(v as "templates" | "niches" | "business")}
         options={[
           { value: "templates", label: "Outreach templates" },
           { value: "niches", label: "Niches", count: niches.length },
+          { value: "business", label: "Business" },
         ]}
         className="mb-4"
       />
@@ -226,6 +262,99 @@ export default function Settings() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {section === "business" && (
+        <>
+          <div className="mb-3 flex gap-2">
+            <Button onClick={() => void saveCompany()} disabled={!companyDirty} loading={savingCompany} size="md">
+              <Save className="h-4 w-4" />
+              Save changes
+            </Button>
+          </div>
+          {!company ? (
+            <Card>
+              <CardBody className="text-sm text-ink-faint">Loading business profile…</CardBody>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader title="Identity" subtitle="Shown on every invoice" />
+                <CardBody className="space-y-3">
+                  <Field label="Trading name">
+                    <Input value={company.trading_name ?? ""} onChange={(e) => setCompanyField("trading_name", e.target.value)} />
+                  </Field>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="Contact email">
+                      <Input value={company.contact_email ?? ""} onChange={(e) => setCompanyField("contact_email", e.target.value)} />
+                    </Field>
+                    <Field label="Contact phone">
+                      <Input value={company.contact_phone ?? ""} onChange={(e) => setCompanyField("contact_phone", e.target.value)} />
+                    </Field>
+                  </div>
+                  <Field label="Business address">
+                    <Textarea rows={2} value={company.address ?? ""} onChange={(e) => setCompanyField("address", e.target.value)} />
+                  </Field>
+                </CardBody>
+              </Card>
+
+              <Card>
+                <CardHeader title="Banking details" subtitle="Pulled onto the printed invoice" />
+                <CardBody className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="Account name">
+                      <Input value={company.bank_account_name ?? ""} onChange={(e) => setCompanyField("bank_account_name", e.target.value)} />
+                    </Field>
+                    <Field label="Bank">
+                      <Input value={company.bank_name ?? ""} onChange={(e) => setCompanyField("bank_name", e.target.value)} />
+                    </Field>
+                    <Field label="Account number">
+                      <Input value={company.bank_account_number ?? ""} onChange={(e) => setCompanyField("bank_account_number", e.target.value)} />
+                    </Field>
+                    <Field label="Branch code">
+                      <Input value={company.bank_branch_code ?? ""} onChange={(e) => setCompanyField("bank_branch_code", e.target.value)} />
+                    </Field>
+                    <Field label="Account type">
+                      <Input value={company.bank_account_type ?? ""} onChange={(e) => setCompanyField("bank_account_type", e.target.value)} />
+                    </Field>
+                  </div>
+                </CardBody>
+              </Card>
+
+              <Card>
+                <CardHeader title="Terms & VAT" subtitle="VAT stays off until you register" />
+                <CardBody className="space-y-3">
+                  <Field label="Payment terms (short — shown in the invoice header)">
+                    <Input value={company.payment_terms ?? ""} onChange={(e) => setCompanyField("payment_terms", e.target.value)} placeholder="Due on Receipt" />
+                  </Field>
+                  <Field label="Invoice footer / fine print">
+                    <Textarea rows={3} value={company.invoice_footer_terms ?? ""} onChange={(e) => setCompanyField("invoice_footer_terms", e.target.value)} />
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={() => setCompanyField("vat_registered", !company.vat_registered)}
+                    className="flex w-full items-center justify-between rounded-xl border border-line bg-surface p-3"
+                  >
+                    <span className="text-left text-sm text-ink">
+                      VAT registered
+                      <span className="mt-0.5 block text-xs text-ink-faint">
+                        Off → invoices say “INVOICE”, no VAT. On → “TAX INVOICE” + 15%.
+                      </span>
+                    </span>
+                    <span className={`flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition ${company.vat_registered ? "bg-brand" : "bg-white/10"}`}>
+                      <span className={`h-5 w-5 rounded-full bg-white transition ${company.vat_registered ? "translate-x-5" : ""}`} />
+                    </span>
+                  </button>
+                  {company.vat_registered && (
+                    <Field label="VAT number">
+                      <Input value={company.vat_number ?? ""} onChange={(e) => setCompanyField("vat_number", e.target.value)} />
+                    </Field>
+                  )}
+                </CardBody>
+              </Card>
             </div>
           )}
         </>

@@ -4,21 +4,28 @@ import Today from "@/pages/Today";
 import Leads from "@/pages/Leads";
 import Messages from "@/pages/Messages";
 import Clients from "@/pages/Clients";
+import Projects from "@/pages/Projects";
+import ProjectDetail from "@/pages/ProjectDetail";
 import Finance from "@/pages/Finance";
 import Content from "@/pages/Content";
 import LeadEngine from "@/pages/LeadEngine";
 import Settings from "@/pages/Settings";
+import InvoicePrint from "@/pages/InvoicePrint";
 
 export default function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<Navigate to="/today" replace />} />
+        {/* Print routes live OUTSIDE the app shell (no nav chrome) */}
+        <Route path="/invoice/:id/print" element={<InvoicePrint />} />
         <Route element={<AppLayout />}>
           <Route path="/today" element={<Today />} />
           <Route path="/leads" element={<Leads />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/clients" element={<Clients />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/finance" element={<Finance />} />
           <Route path="/content" element={<Content />} />
           <Route path="/lead-engine" element={<LeadEngine />} />

@@ -1,5 +1,16 @@
-const CACHE_NAME = "streamline-hq-v1";
-const CORE_ASSETS = ["/", "/today", "/manifest.json", "/favicon.svg", "/app-icon.svg", "/maskable-icon.svg"];
+const CACHE_NAME = "streamline-hq-v2";
+const CORE_ASSETS = [
+  "/",
+  "/today",
+  "/manifest.json",
+  "/favicon.svg",
+  "/favicon-32.png",
+  "/apple-touch-icon-180.png",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-maskable-192.png",
+  "/icon-maskable-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

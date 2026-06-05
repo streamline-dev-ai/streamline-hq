@@ -4,6 +4,7 @@ import {
   Users,
   MessageSquareText,
   BriefcaseBusiness,
+  FolderKanban,
   Wallet,
   Megaphone,
   Rocket,
@@ -15,6 +16,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { signOut } from "@/components/AuthGate";
+import { LogOut } from "lucide-react";
 import { Sheet } from "@/ui";
 
 type NavItem = { to: string; label: string; Icon: LucideIcon };
@@ -26,6 +29,7 @@ const PRIMARY: NavItem[] = [
   { to: "/clients", label: "Clients", Icon: BriefcaseBusiness },
 ];
 const SECONDARY: NavItem[] = [
+  { to: "/projects", label: "Projects", Icon: FolderKanban },
   { to: "/finance", label: "Finance", Icon: Wallet },
   { to: "/content", label: "Content", Icon: Megaphone },
   { to: "/lead-engine", label: "Lead Engine", Icon: Rocket },
@@ -109,6 +113,14 @@ export default function AppLayout() {
             <div className="text-xs text-ink-muted">
               Realtime <span className="text-ink-faint">· {health}</span>
             </div>
+            <button
+              onClick={() => void signOut()}
+              title="Sign out"
+              className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-faint transition hover:bg-base hover:text-ink"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </button>
           </div>
         </aside>
 

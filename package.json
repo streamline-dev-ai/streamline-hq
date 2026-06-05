@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "check": "tsc -b --noEmit",
     "seed:leads": "node scripts/seedLeads.mjs",
-    "cleanup:auto-messages": "node scripts/cleanupAutoMessages.mjs"
+    "cleanup:auto-messages": "node scripts/cleanupAutoMessages.mjs",
+    "ingest:post": "node scripts/ingestPost.mjs",
+    "batch:week": "node scripts/batchIngest.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

@@ -1,0 +1,123 @@
+{
+  "name": "Lead Engine — B: Prospect Control Card",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "lead-engine-enrich", "options": {} },
+      "id": "b6a10000-0000-4000-8000-00000000b001",
+      "name": "Card Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lead-engine-enrich"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/prospects?id=eq.{{ $json.body.prospect_id }}&select=*&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b002",
+      "name": "Get Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=SET_SUPABASE_URL/rest/v1/suppression_list?prospect_id=eq.{{ $json.body && $json.body.prospect_id ? $json.body.prospect_id : $('Card Webhook').item.json.body.prospect_id }}&select=id&limit=1",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Authorization", "value": "Bearer SET_SUPABASE_SERVICE_KEY" },
+          { "name": "Accept-Profile", "value": "streamline_hq" }
+        ] },
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b003",
+      "name": "Check Suppression",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the control-card summary + decide if we should even show it.\n// GATE: only hot/warm prospects that are not suppressed get an outreach card.\n// cold (already has a booking system) and unknown (site unreadable) are parked.\nlet p = $('Get Prospect').item.json; if (Array.isArray(p)) p = p[0] || {};\nlet supp = $('Check Suppression').item.json; if (!Array.isArray(supp)) supp = supp ? [supp] : [];\nconst first = (p.owner_first_name || '').trim();\nconst biz = p.business_name || 'Unknown business';\nfunction waDigits(raw){ let d = String(raw||'').replace(/\\D/g,''); if (d.startsWith('0')) d = '27' + d.slice(1); if (d.length === 9) d = '27' + d; return d; }\nconst phone = waDigits(p.whatsapp_e164 || p.phone_e164 || '');\nconst suppressed = supp.length > 0 || p.popia_optout === true;\nconst temp = (p.lead_temp || 'unknown').toLowerCase();\nconst eligible = (temp === 'hot' || temp === 'warm');\nconst skip = suppressed || !eligible;\nlet summary;\nif (suppressed) summary = 'Skipping ' + biz + ' — on suppression list / opted out. No outreach card shown.';\nelse if (!eligible) summary = 'Parked ' + biz + ' — lead_temp=' + temp + ' (' + (temp === 'cold' ? 'already has a booking system' : temp === 'unknown' ? 'website unreadable, review manually' : 'not yet qualified, run the qualifier') + '). No card.';\nelse summary = ['New prospect ready (' + temp + '): ' + biz + (first ? ' (' + first + ')' : ''), 'Phone: ' + (phone ? '+' + phone : 'MISSING'), (p.niche ? 'Niche: ' + p.niche : ''), (p.suburb ? 'Area: ' + p.suburb : ''), '', 'Pick an action below. I draft, you send from your phone.'].filter(Boolean).join('\\n');\nreturn [{ json: { pid: p.id, biz, first, phone, temp, skip, summary } }];"
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b004",
+      "name": "Build Card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "version": 2 }, "combinator": "and", "conditions": [ { "leftValue": "={{ $json.skip }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ] },
+        "options": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b005",
+      "name": "Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "SET_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.summary }}",
+        "additionalFields": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b006",
+      "name": "Notify Skipped",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, -120]
+    },
+    {
+      "parameters": {
+        "chatId": "SET_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.summary }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": { "rows": [
+          { "row": { "buttons": [
+            { "text": "📩 Cold A (offer-led)", "additionalFields": { "callback_data": "={{ 'cola_' + $json.pid }}" } },
+            { "text": "📩 Cold B (pain-led)", "additionalFields": { "callback_data": "={{ 'colb_' + $json.pid }}" } }
+          ] } },
+          { "row": { "buttons": [
+            { "text": "✅ They said YES — build + deliver", "additionalFields": { "callback_data": "={{ 'build_' + $json.pid }}" } }
+          ] } },
+          { "row": { "buttons": [
+            { "text": "⏰ Day-4", "additionalFields": { "callback_data": "={{ 'day4_' + $json.pid }}" } },
+            { "text": "⏰ Day-10", "additionalFields": { "callback_data": "={{ 'day10_' + $json.pid }}" } }
+          ] } },
+          { "row": { "buttons": [
+            { "text": "🛑 Declined / opt-out", "additionalFields": { "callback_data": "={{ 'optout_' + $json.pid }}" } }
+          ] } }
+        ] },
+        "additionalFields": {}
+      },
+      "id": "b6a10000-0000-4000-8000-00000000b007",
+      "name": "Send Control Card",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 120]
+    }
+  ],
+  "connections": {
+    "Card Webhook": { "main": [[{ "node": "Get Prospect", "type": "main", "index": 0 }]] },
+    "Get Prospect": { "main": [[{ "node": "Check Suppression", "type": "main", "index": 0 }]] },
+    "Check Suppression": { "main": [[{ "node": "Build Card", "type": "main", "index": 0 }]] },
+    "Build Card": { "main": [[{ "node": "Skip?", "type": "main", "index": 0 }]] },
+    "Skip?": { "main": [
+      [{ "node": "Notify Skipped", "type": "main", "index": 0 }],
+      [{ "node": "Send Control Card", "type": "main", "index": 0 }]
+    ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

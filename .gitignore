@@ -27,3 +27,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# n8n access credentials (local only — never commit)
+.n8nac/
+.n8nac/*
+n8n-api-key
+*.n8n-secret

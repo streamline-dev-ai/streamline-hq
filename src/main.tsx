@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { ToastProvider } from "@/components/toast/ToastProvider";
+import AuthGate from "@/components/AuthGate";
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -15,7 +16,9 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ToastProvider>
-      <App />
+      <AuthGate>
+        <App />
+      </AuthGate>
     </ToastProvider>
   </StrictMode>,
 )

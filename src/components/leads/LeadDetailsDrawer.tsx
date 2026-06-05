@@ -149,14 +149,53 @@ export default function LeadDetailsDrawer({
       .finally(() => setLoading(false));
   }, [languageEnabled, lead, open, pushToast]);
 
+  // Convert a lead → client. The `clients` table is the source of truth;
+  // leads.is_client stays as a denormalised marker (Today pipeline reads it).
   async function toggleClient() {
     if (!lead) return;
     setSavingClient(true);
     try {
-      const next = !(lead.is_client === true);
-      const r = await supabase.from("leads").update({ is_client: next }).eq("id", lead.id);
-      if (r.error) throw r.error;
-      pushToast({ type: "success", title: "Updated", message: next ? "Moved to Clients" : "Moved to Active leads" });
+      if (lead.is_client === true) {
+        // Move back: deactivate the client row (don't delete — invoices may FK it).
+        await supabase.from("clients").update({ status: "inactive" }).eq("lead_id", lead.id);
+        const r = await supabase
+          .from("leads")
+          .update({ is_client: false, converted_at: null })
+          .eq("id", lead.id);
+        if (r.error) throw r.error;
+        pushToast({ type: "success", title: "Updated", message: "Moved back to Active leads" });
+      } else {
+        // Convert: ensure a single clients row exists for this lead (idempotent).
+        const existing = await supabase
+          .from("clients")
+          .select("id")
+          .eq("lead_id", lead.id)
+          .maybeSingle();
+        if (existing.error) throw existing.error;
+        if (existing.data) {
+          await supabase
+            .from("clients")
+            .update({ status: "active" })
+            .eq("id", (existing.data as { id: string }).id);
+        } else {
+          const ins = await supabase.from("clients").insert({
+            lead_id: lead.id,
+            business_name: lead.business_name,
+            contact_name: lead.owner_name,
+            email: lead.email,
+            phone: lead.phone,
+            niche: lead.niche,
+            status: "active",
+          });
+          if (ins.error) throw ins.error;
+        }
+        const r = await supabase
+          .from("leads")
+          .update({ is_client: true, converted_at: new Date().toISOString() })
+          .eq("id", lead.id);
+        if (r.error) throw r.error;
+        pushToast({ type: "success", title: "Converted", message: "Added to Clients" });
+      }
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to update client status";
@@ -530,7 +569,7 @@ export default function LeadDetailsDrawer({
                         savingClient && "opacity-60",
                       )}
                     >
-                      {lead.is_client ? "Client (tap to move back)" : "Mark as client"}
+                      {lead.is_client ? "Client ✓ (tap to move back)" : "Convert to client"}
                     </button>
 
                     <div className="grid gap-1 rounded-2xl border border-border bg-panel p-3">
