@@ -12,7 +12,9 @@
     "seed:leads": "node scripts/seedLeads.mjs",
     "cleanup:auto-messages": "node scripts/cleanupAutoMessages.mjs",
     "ingest:post": "node scripts/ingestPost.mjs",
-    "batch:week": "node scripts/batchIngest.mjs"
+    "batch:week": "node scripts/batchIngest.mjs",
+    "stories:load": "node scripts/loadStories.mjs",
+    "stories:schedule": "node scripts/loadStorySchedule.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

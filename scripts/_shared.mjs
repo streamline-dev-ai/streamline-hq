@@ -102,24 +102,53 @@ export async function readCaptionFile(folderPath, name) {
   }
 }
 
-/** master + per-platform captions; each platform falls back to master. */
+/** master + per-platform captions; each platform falls back to master.
+ * YouTube also takes an optional title from caption-youtube-title.txt
+ * (Buffer requires a title for YouTube Shorts). */
 export async function readCaptionSet(folderPath) {
   const master = await readCaptionFile(folderPath, "caption.txt");
   const captions = {};
-  for (const p of ["instagram", "facebook", "linkedin"]) {
+  for (const p of ["instagram", "facebook", "linkedin", "tiktok", "youtube"]) {
     const specific = await readCaptionFile(folderPath, `caption-${p}.txt`);
     captions[p] = specific || master;
   }
+  const ytTitle = await readCaptionFile(folderPath, "caption-youtube-title.txt");
+  if (ytTitle) captions.youtube_title = ytTitle;
   return { master, captions };
 }
 
-export function makeSupabase(env) {
+/**
+ * Supabase client for the scripts. content_posts has RLS (policy:
+ * hq_authenticated_all) so the anon key alone can't write — we sign in with the
+ * operator's login so inserts run as the `authenticated` role. Provide
+ * SUPABASE_AUTH_EMAIL + SUPABASE_AUTH_PASSWORD in .env.local.
+ */
+export async function makeSupabase(env) {
   const url = env.VITE_SUPABASE_URL;
   const key = env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) {
     throw new Error("Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in .env.local");
   }
-  return createClient(url, key);
+  const supabase = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const email = env.SUPABASE_AUTH_EMAIL;
+  const password = env.SUPABASE_AUTH_PASSWORD;
+  if (email && password) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      throw new Error(
+        `Supabase sign-in failed for ${email}: ${error.message}. ` +
+        `Check SUPABASE_AUTH_EMAIL / SUPABASE_AUTH_PASSWORD in .env.local.`,
+      );
+    }
+  } else {
+    throw new Error(
+      "content_posts requires a logged-in user. Add SUPABASE_AUTH_EMAIL + SUPABASE_AUTH_PASSWORD to .env.local.",
+    );
+  }
+  return supabase;
 }
 
 /** Push a queued row to Buffer via the edge function (channel ids from env). */
@@ -137,7 +166,11 @@ export async function pushToBuffer(env, postId) {
         instagram: env.VITE_BUFFER_INSTAGRAM_ID,
         facebook: env.VITE_BUFFER_FACEBOOK_ID,
         linkedin: env.VITE_BUFFER_LINKEDIN_ID,
+        tiktok: env.VITE_BUFFER_TIKTOK_ID,
+        youtube: env.VITE_BUFFER_YOUTUBE_ID,
       },
+      // TikTok + YouTube live on the 2nd Buffer account; its key routes those two.
+      apiKeyB: env.BUFFER_API_KEY_B,
     }),
   });
   const data = await res.json();

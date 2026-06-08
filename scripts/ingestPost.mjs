@@ -38,7 +38,7 @@ async function main() {
   }
 
   const env = await loadEnv();
-  const supabase = makeSupabase(env);
+  const supabase = await makeSupabase(env);
   const creds = cloudinaryCreds(env);
   assertCloudinary(creds);
 
