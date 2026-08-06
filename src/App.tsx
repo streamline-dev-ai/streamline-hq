@@ -8,7 +8,9 @@ import Projects from "@/pages/Projects";
 import ProjectDetail from "@/pages/ProjectDetail";
 import Finance from "@/pages/Finance";
 import Content from "@/pages/Content";
-import LeadEngine from "@/pages/LeadEngine";
+import LeadEngine from "@/pages/LeadEngineV2";
+import LeadEngineLegacy from "@/pages/LeadEngine";
+import EmailPilot from "@/pages/EmailPilot";
 import Settings from "@/pages/Settings";
 import InvoicePrint from "@/pages/InvoicePrint";
 
@@ -29,6 +31,8 @@ export default function App() {
           <Route path="/finance" element={<Finance />} />
           <Route path="/content" element={<Content />} />
           <Route path="/lead-engine" element={<LeadEngine />} />
+          <Route path="/lead-engine/legacy" element={<LeadEngineLegacy />} />
+          <Route path="/email-pilot" element={<EmailPilot />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/today" replace />} />

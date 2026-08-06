@@ -14,7 +14,19 @@
     "ingest:post": "node scripts/ingestPost.mjs",
     "batch:week": "node scripts/batchIngest.mjs",
     "stories:load": "node scripts/loadStories.mjs",
-    "stories:schedule": "node scripts/loadStorySchedule.mjs"
+    "stories:schedule": "node scripts/loadStorySchedule.mjs",
+    "agent:run": "node scripts/runLeadAgent.mjs",
+    "import:lead-history": "node scripts/importLeadHistory.mjs",
+    "source:restaurants": "node scripts/sourceRestaurantLeads.mjs",
+    "seed:restaurant-templates": "node scripts/seedRestaurantTemplates.mjs",
+    "telegram:outreach-summary": "node scripts/sendDailyOutreachSummary.mjs",
+    "audit:outreach-launch": "node scripts/auditOutreachLaunch.mjs",
+    "prepare:outreach-links": "node scripts/prepareOutreachLinks.mjs",
+    "align:historical-follow-ups": "node scripts/alignHistoricalFollowUps.mjs",
+    "log:today-follow-ups": "node scripts/logTodaysFollowUpsAndVeloraReply.mjs",
+    "review:prospects": "node scripts/applyManualProspectReview.mjs",
+    "verify:lead-engine": "node scripts/verifyLeadEngine.mjs",
+    "verify:email-import": "node scripts/verifyEmailPilotImport.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

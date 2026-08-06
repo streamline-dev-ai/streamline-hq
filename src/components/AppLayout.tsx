@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Wallet,
   Megaphone,
+  MailCheck,
   Rocket,
   Settings as SettingsIcon,
   Radio,
@@ -33,6 +34,7 @@ const SECONDARY: NavItem[] = [
   { to: "/finance", label: "Finance", Icon: Wallet },
   { to: "/content", label: "Content", Icon: Megaphone },
   { to: "/lead-engine", label: "Lead Engine", Icon: Rocket },
+  { to: "/email-pilot", label: "Email Pilot", Icon: MailCheck },
   { to: "/settings", label: "Settings", Icon: SettingsIcon },
 ];
 const ALL = [...PRIMARY, ...SECONDARY];
