@@ -119,6 +119,27 @@ export async function createCampaign(input: {
   return data as OutreachCampaign;
 }
 
+/**
+ * Turns sending on or off. Activating also clears any pause.
+ *
+ * Approving and scheduling work while inactive — they only queue. This flag is
+ * what `claim_due_campaign_send` checks before a single email can leave.
+ */
+export async function setCampaignActive(
+  campaignId: string,
+  active: boolean,
+): Promise<void> {
+  const { error } = await hq()
+    .from("outreach_campaigns")
+    .update(
+      active
+        ? { active: true, paused_at: null, pause_reason: null, updated_at: new Date().toISOString() }
+        : { active: false, updated_at: new Date().toISOString() },
+    )
+    .eq("id", campaignId);
+  if (error) throw error;
+}
+
 export async function pauseCampaign(campaignId: string, reason: string): Promise<void> {
   const { error } = await supabase.rpc("pause_outreach_campaign", {
     p_campaign_id: campaignId,

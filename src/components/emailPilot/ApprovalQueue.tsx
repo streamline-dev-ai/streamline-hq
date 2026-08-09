@@ -7,6 +7,7 @@ import {
   Globe,
   MapPin,
   PauseCircle,
+  PlayCircle,
   SkipForward,
   Sparkles,
   Star,
@@ -77,13 +78,13 @@ export default function ApprovalQueue({
   memberships,
   busyId,
   onAction,
-  onPauseCampaign,
+  onSetActive,
 }: {
   campaign: OutreachCampaign | null;
   memberships: CampaignMembership[];
   busyId: string | null;
   onAction: (action: ApprovalAction) => void;
-  onPauseCampaign: () => void;
+  onSetActive: (active: boolean) => void;
 }) {
   const [drafts, setDrafts] = useState<Record<string, { subject: string; body: string }>>({});
   const [nonce, setNonce] = useState<Record<string, number>>({});
@@ -162,11 +163,34 @@ export default function ApprovalQueue({
           </span>
           {campaign.paused_at && <Badge tone="warn">Paused</Badge>}
         </div>
-        <Button variant="secondary" size="sm" onClick={onPauseCampaign}>
-          <PauseCircle className="h-4 w-4" />
-          Pause campaign
-        </Button>
+        {campaign.active ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={busyId === campaign.id}
+            onClick={() => onSetActive(false)}
+          >
+            <PauseCircle className="h-4 w-4" />
+            Pause sending
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            loading={busyId === campaign.id}
+            onClick={() => onSetActive(true)}
+          >
+            <PlayCircle className="h-4 w-4" />
+            Activate sending
+          </Button>
+        )}
       </div>
+
+      {!campaign.active && (
+        <p className="text-xs text-ink-faint">
+          Approving queues a message but sends nothing. Nothing leaves until you
+          activate sending.
+        </p>
+      )}
 
       {remaining === 0 && drafted.length > 0 && (
         <div className="flex items-center gap-2 rounded-xl border border-warn/30 bg-warn-soft px-3 py-2.5 text-sm text-warn">

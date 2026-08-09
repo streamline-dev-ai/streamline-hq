@@ -21,6 +21,7 @@ import {
   pauseCampaign,
   queueFollowUp,
   resolveHandover,
+  setCampaignActive,
   skipMember,
   suppressProspect,
   type WeeklyReport as WeeklyReportData,
@@ -269,12 +270,17 @@ export default function EmailPilot() {
               memberships={memberships}
               busyId={busyId}
               onAction={handleApprovalAction}
-              onPauseCampaign={() => {
+              onSetActive={(active) => {
                 if (!campaign) return;
                 void withBusy(
                   campaign.id,
-                  () => pauseCampaign(campaign.id, "Paused from Streamline HQ"),
-                  "Campaign paused.",
+                  () =>
+                    active
+                      ? setCampaignActive(campaign.id, true)
+                      : pauseCampaign(campaign.id, "Paused from Streamline HQ"),
+                  active
+                    ? "Sending activated — approved messages will go out in business hours."
+                    : "Sending paused.",
                 );
               }}
             />
