@@ -26,7 +26,8 @@
     "log:today-follow-ups": "node scripts/logTodaysFollowUpsAndVeloraReply.mjs",
     "review:prospects": "node scripts/applyManualProspectReview.mjs",
     "verify:lead-engine": "node scripts/verifyLeadEngine.mjs",
-    "verify:email-import": "node scripts/verifyEmailPilotImport.mjs"
+    "verify:email-import": "node scripts/verifyEmailPilotImport.mjs",
+    "audit:n8n-triggers": "node scripts/auditN8nTriggers.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
